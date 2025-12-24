@@ -12,6 +12,10 @@ class CartManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     private init() {
+        // Force clear cart on startup to ensure we start with fresh structure
+        print("🛒 [DEBUG] CartManager init - clearing cart to ensure fresh structure")
+        items.removeAll()
+        userDefaults.removeObject(forKey: cartStorageKey)
         loadCart()
 
         // Update summary whenever items change
@@ -48,9 +52,49 @@ class CartManager: ObservableObject {
         print("Cart: Total items in cart: \(cartSummary.itemCount)")
     }
 
-    func addProduct(_ product: Product, quantity: Int = 1, customizations: [ProductCustomization] = []) {
+    func addProduct(_ product: Product, quantity: Int = 1, customizations: [CustomizationSelection] = []) {
         let request = AddToCartRequest(product: product, quantity: quantity, customizations: customizations)
         addItem(request)
+    }
+
+    // New method for adding products with customization details
+    func addProduct(_ cartProduct: CartProductItem, quantity: Int = 1) {
+        // Use customization selections directly
+        let customizations = cartProduct.selectedCustomizations.isEmpty ? nil : cartProduct.selectedCustomizations
+
+        let cartItem = CartItem(
+            id: generateCartItemId(productId: cartProduct.product.id, customizations: cartProduct.selectedCustomizations),
+            productId: cartProduct.product.id,
+            sellerId: cartProduct.product.sellerId,
+            name: cartProduct.product.name,
+            price: cartProduct.calculatedPrice,
+            originalPrice: cartProduct.product.originalPrice,
+            image: cartProduct.product.mainImage,
+            quantity: quantity,
+            sku: cartProduct.product.sku,
+            sellerName: cartProduct.product.sellerName,
+            customizations: customizations,
+            maxStock: cartProduct.product.stockCount
+        )
+
+        // Check if item with same configuration already exists
+        if let existingIndex = items.firstIndex(where: { $0.id == cartItem.id }) {
+            // Update quantity of existing item
+            items[existingIndex].quantity += cartItem.quantity
+        } else {
+            // Add new item
+            items.append(cartItem)
+        }
+
+        print("Cart: Added \(cartItem.name) (Qty: \(cartItem.quantity)) to cart")
+        print("Cart: Total items in cart: \(cartSummary.itemCount)")
+    }
+
+
+    private func generateCartItemId(productId: String, customizations: [CustomizationSelection]) -> String {
+        let customizationIds = customizations.map { "\($0.customizationId):\($0.optionId)" }.sorted()
+        let baseId = productId + customizationIds.joined(separator: "-")
+        return String(baseId.hashValue)
     }
 
     func removeItem(_ itemId: String) {
@@ -76,7 +120,8 @@ class CartManager: ObservableObject {
 
     func clearCart() {
         items.removeAll()
-        print("Cart: Cleared all items")
+        saveCart() // Save the empty cart to storage
+        print("Cart: Cleared all items and saved to storage")
     }
 
     func getItem(by id: String) -> CartItem? {

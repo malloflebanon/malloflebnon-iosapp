@@ -8,6 +8,28 @@ struct APIResponse<T: Codable>: Codable {
     let error: String?
 }
 
+// MARK: - Orders Specific Response Model
+struct OrdersResponse: Codable {
+    let success: Bool
+    let orders: [Order]
+    let pagination: Pagination?
+    let userRole: String?
+    let permissions: Permissions?
+}
+
+struct Pagination: Codable {
+    let page: Int
+    let limit: Int
+    let total: Int
+    let pages: Int
+}
+
+struct Permissions: Codable {
+    let canViewAllOrders: Bool
+    let canViewFinancials: Bool
+    let canManageUsers: Bool
+}
+
 // MARK: - Authentication Models
 struct LoginRequest: Codable {
     let email: String
@@ -43,32 +65,225 @@ struct AuthResponse: Codable {
 
 // Note: Cart models moved to CartModels.swift
 
+// MARK: - Branch Models
+struct Branch: Codable, Identifiable {
+    let id: String
+    let sellerId: String
+    let sellerName: String?
+    let name: String
+    let location: BranchLocation
+    let contact: BranchContact
+    let operatingHours: BranchOperatingHoursContainer?
+    let managerId: String?
+    let managerName: String?
+    let isActive: Bool
+    let features: BranchFeatures
+
+    enum CodingKeys: String, CodingKey {
+        case id = "_id"
+        case sellerId, sellerName, name, location, contact, operatingHours, managerId, managerName, isActive, features
+    }
+
+    var displayName: String {
+        return name
+    }
+
+    var fullAddress: String {
+        var addressParts: [String] = []
+        if !location.address.isEmpty { addressParts.append(location.address) }
+        if !location.city.isEmpty { addressParts.append(location.city) }
+        if !location.country.isEmpty { addressParts.append(location.country) }
+        return addressParts.joined(separator: ", ")
+    }
+
+    var phoneNumber: String {
+        return contact.phone ?? "Phone not available"
+    }
+
+    var isAvailableForPickup: Bool {
+        return isActive && features.hasPickup
+    }
+
+    // Convert operating hours container to array for UI compatibility
+    var operatingHoursArray: [BranchOperatingHours] {
+        guard let hours = operatingHours else { return [] }
+        var hoursArray: [BranchOperatingHours] = []
+
+        if let monday = hours.monday {
+            hoursArray.append(BranchOperatingHours(day: "Monday", open: monday.open, close: monday.close, isOpen: monday.isOpenComputed))
+        }
+        if let tuesday = hours.tuesday {
+            hoursArray.append(BranchOperatingHours(day: "Tuesday", open: tuesday.open, close: tuesday.close, isOpen: tuesday.isOpenComputed))
+        }
+        if let wednesday = hours.wednesday {
+            hoursArray.append(BranchOperatingHours(day: "Wednesday", open: wednesday.open, close: wednesday.close, isOpen: wednesday.isOpenComputed))
+        }
+        if let thursday = hours.thursday {
+            hoursArray.append(BranchOperatingHours(day: "Thursday", open: thursday.open, close: thursday.close, isOpen: thursday.isOpenComputed))
+        }
+        if let friday = hours.friday {
+            hoursArray.append(BranchOperatingHours(day: "Friday", open: friday.open, close: friday.close, isOpen: friday.isOpenComputed))
+        }
+        if let saturday = hours.saturday {
+            hoursArray.append(BranchOperatingHours(day: "Saturday", open: saturday.open, close: saturday.close, isOpen: saturday.isOpenComputed))
+        }
+        if let sunday = hours.sunday {
+            hoursArray.append(BranchOperatingHours(day: "Sunday", open: sunday.open, close: sunday.close, isOpen: sunday.isOpenComputed))
+        }
+
+        return hoursArray
+    }
+}
+
+struct BranchLocation: Codable {
+    let address: String
+    let city: String
+    let country: String
+    let coordinates: BranchCoordinates?
+
+    // Computed property for backward compatibility
+    var street: String {
+        return address
+    }
+}
+
+struct BranchCoordinates: Codable {
+    let latitude: Double
+    let longitude: Double
+}
+
+struct BranchContact: Codable {
+    let phone: String?
+    let email: String?
+}
+
+struct BranchFeatures: Codable {
+    let hasPickup: Bool
+    let hasDelivery: Bool
+    let deliveryRadius: Double?
+}
+
+// Container for the API response format with day objects
+struct BranchOperatingHoursContainer: Codable {
+    let monday: BranchDayHours?
+    let tuesday: BranchDayHours?
+    let wednesday: BranchDayHours?
+    let thursday: BranchDayHours?
+    let friday: BranchDayHours?
+    let saturday: BranchDayHours?
+    let sunday: BranchDayHours?
+}
+
+// Individual day hours as returned by API
+struct BranchDayHours: Codable {
+    let open: String
+    let close: String
+    let isOpen: Bool?
+
+    // Computed property to determine if open based on available data
+    var isOpenComputed: Bool {
+        // If isOpen is provided, use it; otherwise assume open if we have open/close times
+        return isOpen ?? (!open.isEmpty && !close.isEmpty && open != "closed" && close != "closed")
+    }
+}
+
+// UI-friendly operating hours model
+struct BranchOperatingHours: Codable {
+    let day: String
+    let open: String
+    let close: String
+    let isOpen: Bool
+
+    var displayText: String {
+        if !isOpen {
+            return "\(day): Closed"
+        }
+        return "\(day): \(open) - \(close)"
+    }
+}
+
+
+struct BranchesResponse: Codable {
+    let success: Bool
+    let branches: [Branch]
+    let message: String?
+    let pagination: Pagination?
+}
+
 // MARK: - Order Models
 struct Order: Codable, Identifiable {
     let id: String
-    let customerId: String
-    let items: [OrderItem]
-    let status: OrderStatus
-    let totalAmount: Double
+    let customerId: String?
+    let customerInfo: CustomerInfo?
+    let items: [OrderItem]?
+    let status: OrderStatus?
+    let totalAmount: Double?
+    let subtotal: Double?
+    let deliveryFee: Double?
+    let giftCardDiscount: Double?
+    let deliveryMethod: DeliveryMethod?
+    let paymentMethod: PaymentMethod?
+    let appliedGiftCard: AppliedGiftCard?
     let shippingAddress: ShippingAddress?
-    let paymentMethod: String?
-    let orderDate: String
+    let orderDate: String?
     let deliveryDate: String?
     let trackingNumber: String?
+    let orderNumber: String
+    let notes: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "_id"
+        case customerId, customerInfo, items, status, totalAmount
+        case subtotal, deliveryFee, giftCardDiscount
+        case deliveryMethod, paymentMethod, appliedGiftCard
+        case shippingAddress, orderDate, deliveryDate
+        case trackingNumber, orderNumber, notes
+    }
 }
 
 struct OrderItem: Codable, Identifiable {
     let id: String
-    let productId: String
-    let productName: String
-    let sku: String
-    let sellerId: String
-    let sellerName: String
-    let quantity: Int
-    let price: Double
+    let productId: String?
+    let productName: String?
+    let sku: String?
+    let sellerId: String?
+    let sellerName: String?
+    let quantity: Int?
+    let price: Double?
     let originalPrice: Double?
-    let total: Double
-    let image: String
+    let total: Double?
+    let image: String?
+
+    // Custom coding keys to handle optional backend id
+    private enum CodingKeys: String, CodingKey {
+        case id, productId, productName, sku, sellerId, sellerName
+        case quantity, price, originalPrice, total, image
+    }
+
+    // Custom initializer from decoder to handle missing id
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        // Generate id if not provided by backend
+        if let backendId = try container.decodeIfPresent(String.self, forKey: .id), !backendId.isEmpty {
+            self.id = backendId
+        } else {
+            let productId = try container.decodeIfPresent(String.self, forKey: .productId) ?? "unknown"
+            let sku = try container.decodeIfPresent(String.self, forKey: .sku) ?? "unknown"
+            self.id = "\(productId)-\(sku)-\(UUID().uuidString.prefix(8))"
+        }
+
+        self.productId = try container.decodeIfPresent(String.self, forKey: .productId)
+        self.productName = try container.decodeIfPresent(String.self, forKey: .productName)
+        self.sku = try container.decodeIfPresent(String.self, forKey: .sku)
+        self.sellerId = try container.decodeIfPresent(String.self, forKey: .sellerId)
+        self.sellerName = try container.decodeIfPresent(String.self, forKey: .sellerName)
+        self.quantity = try container.decodeIfPresent(Int.self, forKey: .quantity)
+        self.price = try container.decodeIfPresent(Double.self, forKey: .price)
+        self.originalPrice = try container.decodeIfPresent(Double.self, forKey: .originalPrice)
+        self.total = try container.decodeIfPresent(Double.self, forKey: .total)
+        self.image = try container.decodeIfPresent(String.self, forKey: .image)
+    }
 }
 
 enum OrderStatus: String, Codable, CaseIterable {
@@ -78,6 +293,7 @@ enum OrderStatus: String, Codable, CaseIterable {
     case shipped = "shipped"
     case delivered = "delivered"
     case cancelled = "cancelled"
+    case refunded = "refunded"
 
     var displayName: String {
         switch self {
@@ -87,6 +303,25 @@ enum OrderStatus: String, Codable, CaseIterable {
         case .shipped: return "Shipped"
         case .delivered: return "Delivered"
         case .cancelled: return "Cancelled"
+        case .refunded: return "Refunded"
+        }
+    }
+
+    func displayName(for deliveryMethod: DeliveryMethod?) -> String {
+        guard let deliveryMethod = deliveryMethod else { return displayName }
+
+        if deliveryMethod == .storePickup {
+            switch self {
+            case .pending: return "Pending Pickup"
+            case .confirmed: return "Ready for Pickup"
+            case .processing: return "Being Prepared"
+            case .shipped: return "Ready for Pickup"
+            case .delivered: return "Picked Up"
+            case .cancelled: return "Cancelled"
+            case .refunded: return "Refunded"
+            }
+        } else {
+            return displayName
         }
     }
 
@@ -98,7 +333,333 @@ enum OrderStatus: String, Codable, CaseIterable {
         case .shipped: return "indigo"
         case .delivered: return "green"
         case .cancelled: return "red"
+        case .refunded: return "gray"
         }
+    }
+}
+
+// MARK: - Customer Info Models
+struct CustomerInfo: Codable {
+    let firstName: String
+    let lastName: String
+    let email: String
+    let phone: String
+
+    var fullName: String {
+        "\(firstName) \(lastName)"
+    }
+}
+
+// Frontend-compatible customer info structure
+struct FrontendCustomerInfo: Codable {
+    let name: String
+    let email: String
+    let phone: String
+}
+
+// MARK: - Delivery Method Models
+// MARK: - Seller Selection Models
+enum RemainingItemsAction: String, CaseIterable {
+    case delivery = "delivery"
+    case remove = "remove"
+
+    var title: String {
+        switch self {
+        case .delivery: return "Choose Home Delivery"
+        case .remove: return "Remove from Cart"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .delivery: return "Deliver these items to your address"
+        case .remove: return "Remove these items (you can add them back later)"
+        }
+    }
+}
+
+struct SellerGroup {
+    let sellerId: String
+    let sellerName: String
+    let items: [CartItem]
+
+    var itemCount: Int {
+        return items.count
+    }
+
+    var subtotal: Double {
+        return items.reduce(0) { $0 + $1.total }
+    }
+}
+
+enum DeliveryMethod: String, Codable, CaseIterable {
+    case homeDelivery = "home_delivery"
+    case storePickup = "store_pickup"
+
+    // Custom decoder to handle backend's different values
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(String.self)
+
+        switch value {
+        case "delivery", "home_delivery":
+            self = .homeDelivery
+        case "pickup", "store_pickup":
+            self = .storePickup
+        default:
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(codingPath: decoder.codingPath,
+                                    debugDescription: "Cannot initialize DeliveryMethod from invalid String value \(value)")
+            )
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .homeDelivery: return "Home Delivery"
+        case .storePickup: return "Store Pickup"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .homeDelivery: return "Delivered to your doorstep"
+        case .storePickup: return "Pick up from our store"
+        }
+    }
+
+    var fee: Double {
+        switch self {
+        case .homeDelivery: return 5.0
+        case .storePickup: return 0.0
+        }
+    }
+
+    var estimatedDays: Int {
+        switch self {
+        case .homeDelivery: return 3
+        case .storePickup: return 1
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .homeDelivery: return "car.fill"
+        case .storePickup: return "storefront"
+        }
+    }
+}
+
+// MARK: - Payment Method Models
+enum PaymentMethod: String, Codable, CaseIterable {
+    case cashOnDelivery = "cod"
+
+    // Custom decoder to handle backend's different values
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(String.self)
+
+        switch value {
+        case "cod", "cash_on_delivery", "COD":
+            self = .cashOnDelivery
+        default:
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(codingPath: decoder.codingPath,
+                                    debugDescription: "Cannot initialize PaymentMethod from invalid String value \(value)")
+            )
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .cashOnDelivery: return "Cash on Delivery"
+        }
+    }
+
+    func title(for deliveryMethod: DeliveryMethod) -> String {
+        switch self {
+        case .cashOnDelivery:
+            return deliveryMethod == .storePickup ? "Cash on Pickup" : "Cash on Delivery"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .cashOnDelivery: return "Pay when you receive your order"
+        }
+    }
+
+    func description(for deliveryMethod: DeliveryMethod) -> String {
+        switch self {
+        case .cashOnDelivery:
+            return deliveryMethod == .storePickup ? "Pay when you pick up your order" : "Pay when you receive your order"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .cashOnDelivery: return "banknote"
+        }
+    }
+}
+
+// MARK: - Gift Card Models
+struct GiftCard: Codable, Identifiable {
+    let id: String
+    let code: String
+    let balance: Double
+    let originalAmount: Double
+    let isActive: Bool
+    let expiryDate: String?
+    let createdAt: String
+
+    var formattedCode: String {
+        let cleanCode = code.replacingOccurrences(of: "-", with: "")
+        if cleanCode.hasPrefix("Sanipa") {
+            return code
+        }
+        let codeWithoutPrefix = cleanCode.replacingOccurrences(of: "Sanipa", with: "")
+        let chunks = codeWithoutPrefix.chunked(into: 4)
+        return "Sanipa-" + chunks.joined(separator: "-")
+    }
+
+    var isValid: Bool {
+        return isActive && balance > 0
+    }
+}
+
+struct AppliedGiftCard: Codable {
+    let code: String
+    let discountAmount: Double
+    let remainingBalance: Double
+}
+
+struct GiftCardValidationRequest: Codable {
+    let code: String
+}
+
+struct GiftCardValidationResponse: Codable {
+    let success: Bool
+    let message: String
+    let giftCard: GiftCard?
+}
+
+// MARK: - Checkout Models
+struct CreateOrderRequest: Codable {
+    let clientOrderRef: String
+    let userId: String?
+    let customer: FrontendCustomerInfo
+    let deliveryMethod: String
+    let shippingAddress: ShippingAddressRequest?
+    let pickupBranch: PickupBranchRequest?
+    let items: [OrderItemRequest]
+    let shippingCents: Int
+    let taxCents: Int
+    let totalCents: Int
+    let paymentMethod: String
+    let giftCard: GiftCardRequest?
+}
+
+struct OrderItemRequest: Codable {
+    let productId: String
+    let sku: String
+    let title: String
+    let vendorId: String
+    let unitPriceCents: Int
+    let quantity: Int
+    let customizations: [CustomizationSelection]
+}
+
+struct ShippingAddressRequest: Codable {
+    let country: String
+    let city: String
+    let street: String
+    let postcode: String
+    let notes: String?
+}
+
+struct PickupBranchRequest: Codable {
+    let branchId: String?
+    let branchName: String?
+    let branchAddress: String?
+}
+
+struct GiftCardRequest: Codable {
+    let code: String
+    let amountUsed: Double
+    let remainingBalance: Double
+}
+
+struct CreateOrderResponse: Codable {
+    let success: Bool
+    let message: String
+    let order: Order?
+    let orderNumber: String?
+}
+
+// MARK: - Checkout State Models
+struct CheckoutState {
+    var currentStep: CheckoutStep = .customerInfo
+    var customerInfo: CustomerInfo?
+    var deliveryMethod: DeliveryMethod = .homeDelivery
+    var paymentMethod: PaymentMethod = .cashOnDelivery
+    var appliedGiftCard: AppliedGiftCard?
+    var notes: String = ""
+    var isProcessing: Bool = false
+    var errorMessage: String?
+
+    var canProceedToNextStep: Bool {
+        switch currentStep {
+        case .customerInfo:
+            return customerInfo != nil
+        case .delivery:
+            return true
+        case .payment:
+            return true
+        }
+    }
+
+    var canPlaceOrder: Bool {
+        return customerInfo != nil && !isProcessing
+    }
+}
+
+enum CheckoutStep: Int, CaseIterable {
+    case customerInfo = 0
+    case delivery = 1
+    case payment = 2
+
+    var title: String {
+        switch self {
+        case .customerInfo: return "Customer Info"
+        case .delivery: return "Delivery"
+        case .payment: return "Payment"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .customerInfo: return "person"
+        case .delivery: return "truck"
+        case .payment: return "creditcard"
+        }
+    }
+}
+
+// MARK: - Order Summary Model
+struct OrderSummary: Codable {
+    let subtotal: Double
+    let deliveryFee: Double
+    let giftCardDiscount: Double
+    let total: Double
+    let itemCount: Int
+
+    init(items: [CartItem], deliveryMethod: DeliveryMethod, giftCardDiscount: Double = 0) {
+        self.subtotal = items.reduce(0) { $0 + $1.total }
+        self.deliveryFee = deliveryMethod.fee
+        self.giftCardDiscount = giftCardDiscount
+        self.total = max(0, subtotal + deliveryFee - giftCardDiscount)
+        self.itemCount = items.reduce(0) { $0 + $1.quantity }
     }
 }
 
@@ -152,3 +713,14 @@ struct APIError: Error, LocalizedError, Codable {
 
 // Note: ProductSearchParams moved to ProductModels.swift
 // Note: ProductSortOption moved to ProductModels.swift
+
+// MARK: - Extensions
+extension String {
+    func chunked(into size: Int) -> [String] {
+        return stride(from: 0, to: count, by: size).map {
+            let start = index(startIndex, offsetBy: $0)
+            let end = index(start, offsetBy: min(size, count - $0))
+            return String(self[start..<end])
+        }
+    }
+}

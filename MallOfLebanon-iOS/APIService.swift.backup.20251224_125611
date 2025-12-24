@@ -365,66 +365,6 @@ class APIService: ObservableObject {
         )
     }
 
-    // MARK: - Branches
-    func getBranches() -> AnyPublisher<BranchesResponse, APIError> {
-        return performRequest(
-            endpoint: "/branches/public",
-            method: .GET,
-            responseType: BranchesResponse.self
-        )
-    }
-
-    func getBranchById(id: String) -> AnyPublisher<APIResponse<Branch>, APIError> {
-        return performRequest(
-            endpoint: "/branches/\(id)",
-            method: .GET,
-            responseType: APIResponse<Branch>.self
-        )
-    }
-
-    func getBranchesByVendor(vendorId: String) -> AnyPublisher<BranchesResponse, APIError> {
-        return performRequest(
-            endpoint: "/branches/vendor/\(vendorId)",
-            method: .GET,
-            responseType: BranchesResponse.self
-        )
-    }
-
-    func getNearbyBranches(latitude: Double, longitude: Double, radius: Double = 10.0) -> AnyPublisher<BranchesResponse, APIError> {
-        var components = URLComponents(string: "\(baseURL)/branches/nearby")!
-        components.queryItems = [
-            URLQueryItem(name: "latitude", value: "\(latitude)"),
-            URLQueryItem(name: "longitude", value: "\(longitude)"),
-            URLQueryItem(name: "radius", value: "\(radius)")
-        ]
-
-        guard let url = components.url else {
-            return Fail(error: APIError(message: "Invalid URL for nearby branches"))
-                .eraseToAnyPublisher()
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        return session.dataTaskPublisher(for: request)
-            .tryMap { data, response -> Data in
-                guard let httpResponse = response as? HTTPURLResponse,
-                      200...299 ~= httpResponse.statusCode else {
-                    throw APIError(message: "Request failed")
-                }
-                return data
-            }
-            .decode(type: BranchesResponse.self, decoder: decoder)
-            .mapError { error in
-                if let apiError = error as? APIError {
-                    return apiError
-                }
-                return APIError(message: error.localizedDescription)
-            }
-            .eraseToAnyPublisher()
-    }
-
     // MARK: - Orders
     func createOrder(_ orderRequest: CreateOrderRequest) -> AnyPublisher<CreateOrderResponse, APIError> {
         guard let body = try? encoder.encode(orderRequest) else {
@@ -440,50 +380,12 @@ class APIService: ObservableObject {
         )
     }
 
-    func getOrders() -> AnyPublisher<OrdersResponse, APIError> {
-        guard let url = URL(string: baseURL + "/orders") else {
-            return Fail(error: APIError(message: "Invalid URL"))
-                .eraseToAnyPublisher()
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        // Add authentication token if available
-        if let token = KeychainManager.shared.getToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-
-        return URLSession.shared.dataTaskPublisher(for: request)
-            .tryMap { [weak self] data, response in
-                // Debug: Print raw JSON response for orders
-                if let jsonString = String(data: data, encoding: .utf8) {
-                    print("🔍 [DEBUG] Raw Orders API Response:")
-                    print(jsonString)
-                }
-
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    throw APIError(message: "Invalid response")
-                }
-
-                guard 200...299 ~= httpResponse.statusCode else {
-                    if let errorMessage = String(data: data, encoding: .utf8) {
-                        print("❌ HTTP Error \(httpResponse.statusCode): \(errorMessage)")
-                    }
-                    throw APIError(message: "HTTP \(httpResponse.statusCode)")
-                }
-
-                return data
-            }
-            .decode(type: OrdersResponse.self, decoder: self.decoder)
-            .mapError { error in
-                if let decodingError = error as? DecodingError {
-                    print("❌ Decoding error for Orders: \(decodingError)")
-                }
-                return APIError(message: error.localizedDescription)
-            }
-            .eraseToAnyPublisher()
+    func getOrders() -> AnyPublisher<APIResponse<[Order]>, APIError> {
+        return performRequest(
+            endpoint: "/orders",
+            method: .GET,
+            responseType: APIResponse<[Order]>.self
+        )
     }
 
     func getOrder(id: String) -> AnyPublisher<APIResponse<Order>, APIError> {

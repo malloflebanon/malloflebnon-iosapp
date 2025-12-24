@@ -19,16 +19,6 @@ struct ProductListView: View {
                     // Search Bar
                     searchSection
 
-                    // Categories Horizontal Scroll
-                    if !viewModel.categories.isEmpty {
-                        categoriesSection
-                    }
-
-                    // Collections/Featured Section
-                    if !viewModel.collections.isEmpty {
-                        collectionsSection
-                    }
-
                     // Products Grid
                     productsSection
 
@@ -39,7 +29,7 @@ struct ProductListView: View {
                 }
                 .padding(.horizontal)
             }
-            .navigationTitle("Mall Of Lebanon")
+            .navigationTitle("All Products")
             .navigationBarItems(
                 leading: filterButton,
                 trailing: sortButton
@@ -74,58 +64,6 @@ struct ProductListView: View {
         .padding(.vertical, 8)
     }
 
-    private var categoriesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Categories")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                Spacer()
-            }
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 16) {
-                    // "All" category button
-                    CategoryCard(
-                        category: nil,
-                        isSelected: viewModel.selectedCategory == nil
-                    ) {
-                        viewModel.filterByCategory(nil)
-                    }
-
-                    ForEach(viewModel.categories.prefix(8)) { category in
-                        CategoryCard(
-                            category: category,
-                            isSelected: viewModel.selectedCategory?.id == category.id
-                        ) {
-                            viewModel.filterByCategory(category)
-                        }
-                    }
-                }
-                .padding(.horizontal)
-            }
-        }
-    }
-
-    private var collectionsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Featured Collections")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                Spacer()
-            }
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 16) {
-                    ForEach(viewModel.collections.prefix(5)) { collection in
-                        CollectionCard(collection: collection)
-                    }
-                }
-                .padding(.horizontal)
-            }
-        }
-    }
 
     private var productsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -150,10 +88,16 @@ struct ProductListView: View {
                 emptyStateView
             } else {
                 LazyVGrid(columns: columns, spacing: 16) {
-                    ForEach(viewModel.products) { product in
-                        ProductCard(product: product) {
-                            addToCart(product)
-                        }
+                    ForEach(viewModel.products, id: \.id) { product in
+                        ProductCardWithNavigation(
+                            product: product,
+                            productId: product.id,
+                            onAddToCart: {
+                                addToCart(product)
+                            }
+                        )
+                        .environmentObject(cartManager)
+                        .id(product.id) // Stable identifier for SwiftUI optimization
                     }
                 }
             }
@@ -330,157 +274,80 @@ struct ProductListView: View {
     }
 }
 
-// MARK: - Supporting Views
 
-struct CategoryCard: View {
-    let category: Category?
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 8) {
-                AsyncImage(url: URL(string: category?.image ?? "")) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.gray.opacity(0.3))
-                        .overlay(
-                            Image(systemName: category == nil ? "square.grid.2x2" : "tag")
-                                .foregroundColor(.gray)
-                        )
-                }
-                .frame(width: 60, height: 60)
-                .cornerRadius(8)
-
-                Text(category?.name ?? "All")
-                    .font(.caption)
-                    .fontWeight(isSelected ? .semibold : .regular)
-                    .foregroundColor(isSelected ? .blue : .primary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(width: 80)
-        }
-    }
-}
-
-struct CollectionCard: View {
-    let collection: ProductCollection
-
-    var body: some View {
-        VStack(alignment: .leading) {
-            AsyncImage(url: URL(string: collection.image ?? "")) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } placeholder: {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.gray.opacity(0.3))
-                    .overlay(
-                        Image(systemName: "photo")
-                            .foregroundColor(.gray)
-                    )
-            }
-            .frame(width: 140, height: 80)
-            .cornerRadius(12)
-
-            Text(collection.name)
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .lineLimit(2)
-        }
-        .frame(width: 140)
-    }
-}
-
-struct ProductCard: View {
+// MARK: - ProductCardWithNavigation
+struct ProductCardWithNavigation: View {
     let product: Product
-    let addToCartAction: () -> Void
+    let productId: String
+    let onAddToCart: () -> Void
+    @EnvironmentObject var cartManager: CartManager
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Product Image
-            AsyncImage(url: URL(string: product.mainImage)) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } placeholder: {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.gray.opacity(0.3))
-                    .overlay(
-                        Image(systemName: "photo")
-                            .foregroundColor(.gray)
-                    )
-            }
-            .frame(height: 140)
-            .cornerRadius(12)
-            .overlay(alignment: .topTrailing) {
-                if product.hasDiscount {
-                    Text("-\(product.discountPercentage)%")
-                        .font(.caption)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.red)
-                        .cornerRadius(4)
-                        .padding(8)
-                }
-            }
+            // Product Image - Tappable area for navigation
+            NavigationLink(destination: ProductDetailView(productId: productId).environmentObject(cartManager)) {
+                VStack(alignment: .leading, spacing: 8) {
+                    CachedImageView.productImage(url: product.mainImage)
+                        .aspectRatio(contentMode: .fill)
+                        .frame(maxWidth: .infinity, maxHeight: 140)
+                        .clipped()
+                        .cornerRadius(12)
+                        .overlay(alignment: .topTrailing) {
+                            if product.hasDiscount {
+                                Text("-\(product.discountPercentage)%")
+                                    .font(.caption)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.red)
+                                    .cornerRadius(8)
+                                    .padding(8)
+                            }
+                        }
 
-            VStack(alignment: .leading, spacing: 4) {
-                // Product Name
-                Text(product.name)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .lineLimit(2)
-
-                // Seller Name
-                Text("by \(product.sellerName)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                // Rating
-                HStack(spacing: 4) {
-                    Image(systemName: "star.fill")
-                        .foregroundColor(.yellow)
-                        .font(.caption)
-                    Text(String(format: "%.1f", product.rating))
-                        .font(.caption)
-                    Text("(\(product.reviewCount))")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Spacer()
-                }
-
-                // Price
-                HStack {
-                    Text("$\(product.formattedPrice)")
-                        .font(.subheadline)
-                        .fontWeight(.bold)
+                    // Product Details - Also tappable for navigation
+                    Text(product.name)
+                        .font(.system(size: 14, weight: .medium))
+                        .lineLimit(2)
                         .foregroundColor(.primary)
 
-                    if let originalPrice = product.formattedOriginalPrice {
-                        Text("$\(originalPrice)")
+                    Text("by \(product.sellerName)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .buttonStyle(PlainButtonStyle())
+
+            // Price and Cart Button Row - NOT part of navigation
+            HStack(alignment: .bottom) {
+                VStack(alignment: .leading, spacing: 2) {
+                    if let originalPrice = product.originalPrice, originalPrice > product.price {
+                        Text("$\(originalPrice, specifier: "%.2f")")
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .strikethrough()
                     }
 
-                    Spacer()
+                    Text("$\(product.price, specifier: "%.2f")")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.primary)
+                }
 
-                    Button(action: addToCartAction) {
-                        Image(systemName: "cart.badge.plus")
-                            .foregroundColor(.blue)
-                            .font(.system(size: 16, weight: .medium))
-                    }
+                Spacer()
+
+                // Add to Cart Button - Separate from navigation
+                Button(action: onAddToCart) {
+                    Image(systemName: "cart.badge.plus")
+                        .foregroundColor(.white)
+                        .font(.system(size: 16, weight: .medium))
+                        .frame(width: 32, height: 32)
+                        .background(Color.blue)
+                        .cornerRadius(8)
                 }
             }
         }
-        .padding(8)
         .background(Color(.systemBackground))
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)

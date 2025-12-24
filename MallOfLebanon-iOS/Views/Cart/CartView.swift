@@ -1,5 +1,6 @@
 import SwiftUI
 
+
 struct CartView: View {
     @EnvironmentObject var cartManager: CartManager
     @State private var showingCheckout = false
@@ -19,7 +20,7 @@ struct CartView: View {
             )
         }
         .sheet(isPresented: $showingCheckout) {
-            CheckoutView()
+            CheckoutView(cartManager: cartManager)
                 .environmentObject(cartManager)
         }
     }
@@ -207,18 +208,26 @@ struct CartItemRow: View {
     var body: some View {
         HStack(spacing: 12) {
             // Product Image
-            AsyncImage(url: URL(string: item.image)) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } placeholder: {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.gray.opacity(0.3))
-                    .overlay(
-                        Image(systemName: "photo")
-                            .foregroundColor(.gray)
-                    )
-            }
+            CachedImageView(
+                url: URL(string: item.image),
+                placeholder: {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.3))
+                        .overlay(
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        )
+                },
+                failureView: {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.3))
+                        .overlay(
+                            Image(systemName: "photo")
+                                .foregroundColor(.gray)
+                        )
+                }
+            )
+            .aspectRatio(contentMode: .fill)
             .frame(width: 60, height: 60)
             .cornerRadius(8)
 
@@ -307,136 +316,72 @@ struct CartItemRow: View {
 struct CheckoutView: View {
     @Environment(\.presentationMode) var presentationMode
     @EnvironmentObject var cartManager: CartManager
+    @EnvironmentObject var authManager: AuthenticationManager
+    @StateObject private var viewModel: CheckoutViewModel
 
-    @State private var firstName = ""
-    @State private var lastName = ""
-    @State private var address = ""
-    @State private var city = ""
-    @State private var country = ""
-    @State private var postalCode = ""
-    @State private var phone = ""
-    @State private var paymentMethod = "Credit Card"
-    @State private var notes = ""
-
-    @State private var isProcessing = false
-    @State private var showingError = false
-    @State private var errorMessage = ""
-
-    private let paymentMethods = ["Credit Card", "Debit Card", "PayPal", "Apple Pay"]
+    init(cartManager: CartManager = CartManager.shared) {
+        self._viewModel = StateObject(wrappedValue: CheckoutViewModel(cartManager: cartManager))
+    }
 
     var body: some View {
         NavigationView {
-            Form {
-                Section("Shipping Address") {
-                    TextField("First Name", text: $firstName)
-                    TextField("Last Name", text: $lastName)
-                    TextField("Address", text: $address)
-                    TextField("City", text: $city)
-                    TextField("Country", text: $country)
-                    TextField("Postal Code", text: $postalCode)
-                    TextField("Phone (optional)", text: $phone)
-                }
+            VStack(spacing: 0) {
+                // Progress Indicator
+                CheckoutProgressIndicator(
+                    currentStep: viewModel.checkoutState.currentStep,
+                    progressPercentage: viewModel.progressPercentage
+                )
+                .padding(.horizontal)
+                .padding(.top)
 
-                Section("Payment Method") {
-                    Picker("Payment Method", selection: $paymentMethod) {
-                        ForEach(paymentMethods, id: \.self) { method in
-                            Text(method).tag(method)
+                // Step Content
+                ScrollView {
+                    VStack(spacing: 20) {
+                        switch viewModel.checkoutState.currentStep {
+                        case .customerInfo:
+                            CustomerInfoStepView(viewModel: viewModel)
+                        case .delivery:
+                            DeliveryStepView(viewModel: viewModel)
+                        case .payment:
+                            PaymentStepView(viewModel: viewModel)
                         }
                     }
-                    .pickerStyle(MenuPickerStyle())
+                    .padding()
                 }
 
-                Section("Order Notes") {
-                    if #available(iOS 16.0, *) {
-                        TextField("Special instructions (optional)", text: $notes, axis: .vertical)
-                            .lineLimit(3...6)
-                    } else {
-                        TextField("Special instructions (optional)", text: $notes)
-                            .lineLimit(3)
-                    }
-                }
+                Divider()
 
-                Section("Order Summary") {
-                    ForEach(cartManager.cart.items) { item in
-                        HStack {
-                            Text(item.name)
-                            Spacer()
-                            Text("\(item.quantity) × $\(String(format: "%.2f", item.price))")
-                                .foregroundColor(.secondary)
-                        }
-                    }
-
-                    Divider()
-
-                    HStack {
-                        Text("Total")
-                            .fontWeight(.bold)
-                        Spacer()
-                        Text("$\(String(format: "%.2f", cartManager.cart.subtotal))")
-                            .fontWeight(.bold)
-                            .foregroundColor(.blue)
-                    }
-                }
+                // Navigation Buttons
+                CheckoutNavigationButtons(viewModel: viewModel)
+                    .padding()
             }
             .navigationTitle("Checkout")
+            .navigationBarTitleDisplayMode(.inline)
             .navigationBarItems(
                 leading: Button("Cancel") {
                     presentationMode.wrappedValue.dismiss()
-                },
-                trailing: Button("Place Order") {
-                    placeOrder()
                 }
-                .disabled(isProcessing || !isFormValid)
             )
-            .alert("Error", isPresented: $showingError) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text(errorMessage)
+            .onAppear {
+                viewModel.cartManager = cartManager
+                viewModel.setAuthManager(authManager)
             }
-        }
-    }
-
-    private var isFormValid: Bool {
-        !firstName.isEmpty && !lastName.isEmpty && !address.isEmpty && !city.isEmpty && !country.isEmpty
-    }
-
-    private func placeOrder() {
-        isProcessing = true
-
-        let shippingAddress = ShippingAddress(
-            firstName: firstName,
-            lastName: lastName,
-            address: address,
-            city: city,
-            country: country,
-            postalCode: postalCode.isEmpty ? nil : postalCode,
-            phone: phone.isEmpty ? nil : phone
-        )
-
-        let checkoutItems = cartManager.cart.items.map { item in
-            CheckoutItem(
-                productId: item.productId,
-                sellerId: item.sellerId,
-                quantity: item.quantity,
-                price: item.price,
-                customizations: item.customizations
-            )
-        }
-
-        let _ = CheckoutRequest(
-            items: checkoutItems,
-            shippingAddress: shippingAddress,
-            paymentMethod: paymentMethod,
-            notes: notes.isEmpty ? nil : notes
-        )
-
-        // TODO: Implement actual checkout API call
-        // For now, simulate success after a delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            self.isProcessing = false
-            // Clear cart and dismiss
-            self.cartManager.clearCart()
-            self.presentationMode.wrappedValue.dismiss()
+            .alert("Error", isPresented: .constant(viewModel.checkoutState.errorMessage != nil)) {
+                Button("OK") {
+                    viewModel.clearError()
+                }
+            } message: {
+                Text(viewModel.checkoutState.errorMessage ?? "")
+            }
+            .sheet(isPresented: $viewModel.showingOrderSuccess) {
+                OrderSuccessView(
+                    order: viewModel.placedOrder,
+                    onDismiss: {
+                        viewModel.dismissOrderSuccess()
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                )
+            }
         }
     }
 }

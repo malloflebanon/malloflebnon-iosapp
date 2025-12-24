@@ -40,6 +40,12 @@ class AuthenticationManager: ObservableObject {
                 },
                 receiveValue: { [weak self] response in
                     if response.success {
+                        // Check if user is a seller - sellers cannot access customer mobile app
+                        if response.user.role == .seller {
+                            self?.errorMessage = "Sellers cannot access the customer mobile app. Please use the web admin panel to manage your store."
+                            return
+                        }
+
                         self?.handleSuccessfulAuth(user: response.user, token: response.token)
                     } else {
                         self?.errorMessage = response.message
@@ -77,6 +83,12 @@ class AuthenticationManager: ObservableObject {
             },
             receiveValue: { [weak self] response in
                 if response.success {
+                    // Check if user is a seller - sellers cannot access customer mobile app
+                    if response.user.role == .seller {
+                        self?.errorMessage = "Sellers cannot access the customer mobile app. Please use the web admin panel to manage your store."
+                        return
+                    }
+
                     self?.handleSuccessfulAuth(user: response.user, token: response.token)
                 } else {
                     self?.errorMessage = response.message
@@ -156,6 +168,7 @@ class AuthenticationManager: ObservableObject {
         KeychainManager.shared.deleteToken()
         UserDefaults.standard.removeObject(forKey: "currentUser")
     }
+
 
     // MARK: - Validation
     func validateEmail(_ email: String) -> String? {

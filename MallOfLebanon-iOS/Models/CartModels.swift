@@ -11,7 +11,7 @@ struct CartItem: Codable, Identifiable {
     var quantity: Int
     let sku: String
     let sellerName: String
-    let customizations: [ProductCustomization]?
+    let customizations: [CustomizationSelection]?
     let maxStock: Int
 
     var total: Double {
@@ -141,7 +141,7 @@ struct CheckoutItem: Codable {
     let sellerId: String
     let quantity: Int
     let price: Double
-    let customizations: [ProductCustomization]?
+    let customizations: [CustomizationSelection]?
 }
 
 struct CheckoutResponse: Codable {
@@ -160,9 +160,9 @@ struct CheckoutData: Codable {
 struct AddToCartRequest {
     let product: Product
     let quantity: Int
-    let customizations: [ProductCustomization]?
+    let customizations: [CustomizationSelection]?
 
-    init(product: Product, quantity: Int = 1, customizations: [ProductCustomization]? = nil) {
+    init(product: Product, quantity: Int = 1, customizations: [CustomizationSelection]? = nil) {
         self.product = product
         self.quantity = quantity
         self.customizations = customizations
@@ -174,7 +174,7 @@ struct AddToCartRequest {
 }
 
 extension CartItem {
-    static func fromProduct(_ product: Product, quantity: Int = 1, customizations: [ProductCustomization]? = nil) -> CartItem {
+    static func fromProduct(_ product: Product, quantity: Int = 1, customizations: [CustomizationSelection]? = nil) -> CartItem {
         return CartItem(
             id: UUID().uuidString,
             productId: product.id,
@@ -187,7 +187,7 @@ extension CartItem {
             sku: product.sku,
             sellerName: product.sellerName,
             customizations: customizations,
-            maxStock: product.stock
+            maxStock: product.stockCount
         )
     }
 }

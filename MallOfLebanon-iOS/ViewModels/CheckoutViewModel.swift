@@ -12,6 +12,8 @@ class CheckoutViewModel: ObservableObject {
     @Published var validatedGiftCard: GiftCard?
     @Published var showingOrderSuccess = false
     @Published var placedOrder: Order?
+    @Published var orderEmailSent = false
+    @Published var showEmailConfirmation = false
 
     private var authManager: AuthenticationManager
 
@@ -357,6 +359,8 @@ class CheckoutViewModel: ObservableObject {
                 if response.success, let order = response.order {
                     placedOrder = order
                     showingOrderSuccess = true
+                    orderEmailSent = true
+                    showEmailConfirmation = true
 
                     // Handle remaining items for pickup orders
                     if checkoutState.deliveryMethod == .storePickup && selectedPickupSeller != nil && getRemainingItems().count > 0 {
@@ -511,6 +515,10 @@ class CheckoutViewModel: ObservableObject {
         selectedBranch = nil
         isLoadingBranches = false
         branchLoadingError = nil
+
+        // Clear email confirmation data
+        orderEmailSent = false
+        showEmailConfirmation = false
     }
 
     // MARK: - Validation
@@ -559,6 +567,8 @@ class CheckoutViewModel: ObservableObject {
     func dismissOrderSuccess() {
         showingOrderSuccess = false
         placedOrder = nil
+        showEmailConfirmation = false
+        orderEmailSent = false
     }
 
     func setAuthManager(_ authManager: AuthenticationManager) {

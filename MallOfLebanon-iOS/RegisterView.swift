@@ -219,6 +219,31 @@ struct RegisterView: View {
                             .padding(.horizontal, 24)
                     }
 
+                    // Email Confirmation Message
+                    if authManager.showEmailConfirmation && authManager.welcomeEmailSent {
+                        VStack(spacing: 8) {
+                            HStack {
+                                Image(systemName: "envelope.circle.fill")
+                                    .foregroundColor(.green)
+                                    .font(.title2)
+
+                                Text("Welcome email sent!")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.green)
+                            }
+
+                            Text("A welcome email has been sent to \(email). Check your inbox to get started with Mall Of Lebanon!")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding()
+                        .background(Color.green.opacity(0.1))
+                        .cornerRadius(12)
+                        .padding(.horizontal, 24)
+                    }
+
                     // Create Account Button
                     Button(action: register) {
                         HStack {

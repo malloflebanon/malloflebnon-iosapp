@@ -6,6 +6,8 @@ class AuthenticationManager: ObservableObject {
     @Published var currentUser: User?
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var welcomeEmailSent = false
+    @Published var showEmailConfirmation = false
 
     private var cancellables = Set<AnyCancellable>()
     private let apiService = APIService.shared
@@ -88,6 +90,10 @@ class AuthenticationManager: ObservableObject {
                         self?.errorMessage = "Sellers cannot access the customer mobile app. Please use the web admin panel to manage your store."
                         return
                     }
+
+                    // Set welcome email sent flag
+                    self?.welcomeEmailSent = true
+                    self?.showEmailConfirmation = true
 
                     self?.handleSuccessfulAuth(user: response.user, token: response.token)
                 } else {
@@ -204,5 +210,7 @@ class AuthenticationManager: ObservableObject {
     // MARK: - Clear Error
     func clearError() {
         errorMessage = nil
+        showEmailConfirmation = false
+        welcomeEmailSent = false
     }
 }

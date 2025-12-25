@@ -913,6 +913,7 @@ struct HomeView: View {
 struct AccountView: View {
     @EnvironmentObject var authManager: AuthenticationManager
     @State private var showingOrdersView = false
+    @State private var showingEmailSettings = false
 
     var body: some View {
         NavigationView {
@@ -948,7 +949,9 @@ struct AccountView: View {
                     })
                     AccountMenuRow(icon: "heart", title: "Wishlist", action: {})
                     AccountMenuRow(icon: "person", title: "Profile Settings", action: {})
-                    AccountMenuRow(icon: "bell", title: "Notifications", action: {})
+                    AccountMenuRow(icon: "bell", title: "Email Notifications", action: {
+                        showingEmailSettings = true
+                    })
                     AccountMenuRow(icon: "questionmark.circle", title: "Help & Support", action: {})
                 }
                 .padding(.horizontal)
@@ -977,6 +980,9 @@ struct AccountView: View {
         }
         .sheet(isPresented: $showingOrdersView) {
             OrdersView()
+        }
+        .sheet(isPresented: $showingEmailSettings) {
+            EmailNotificationSettingsView()
         }
     }
 }
@@ -1367,5 +1373,122 @@ struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
         ContentView()
             .environmentObject(CartManager.shared)
+    }
+}
+
+// MARK: - Email Notification Settings
+struct EmailNotificationSettingsView: View {
+    @State private var orderConfirmationEmails = true
+    @State private var orderStatusUpdates = true
+    @State private var promotionalEmails = false
+    @State private var weeklyNewsletters = false
+    @State private var securityNotifications = true
+    @Environment(\.presentationMode) var presentationMode
+
+    var body: some View {
+        NavigationView {
+            List {
+                Section(header: Text("Order Notifications")) {
+                    NotificationToggleRow(
+                        title: "Order Confirmations",
+                        subtitle: "Email when orders are placed",
+                        isOn: $orderConfirmationEmails
+                    )
+
+                    NotificationToggleRow(
+                        title: "Order Status Updates",
+                        subtitle: "Email when order status changes",
+                        isOn: $orderStatusUpdates
+                    )
+                }
+
+                Section(header: Text("Marketing")) {
+                    NotificationToggleRow(
+                        title: "Promotional Offers",
+                        subtitle: "Special deals and discounts",
+                        isOn: $promotionalEmails
+                    )
+
+                    NotificationToggleRow(
+                        title: "Weekly Newsletter",
+                        subtitle: "New products and updates",
+                        isOn: $weeklyNewsletters
+                    )
+                }
+
+                Section(header: Text("Security")) {
+                    NotificationToggleRow(
+                        title: "Security Alerts",
+                        subtitle: "Account security notifications",
+                        isOn: $securityNotifications
+                    )
+                }
+
+                Section {
+                    VStack(spacing: 12) {
+                        HStack {
+                            Image(systemName: "info.circle")
+                                .foregroundColor(.blue)
+
+                            Text("Email Preferences")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                        }
+
+                        Text("Your email preferences are automatically synced with our system. You'll receive notifications based on these settings.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.leading)
+                    }
+                    .padding(.vertical, 8)
+                }
+            }
+            .navigationTitle("Email Notifications")
+            .navigationBarItems(
+                leading: Button("Cancel") {
+                    presentationMode.wrappedValue.dismiss()
+                },
+                trailing: Button("Save") {
+                    savePreferences()
+                    presentationMode.wrappedValue.dismiss()
+                }
+            )
+        }
+    }
+
+    private func savePreferences() {
+        // TODO: Save preferences to backend/UserDefaults
+        print("📧 Saving email preferences:")
+        print("  Order Confirmations: \(orderConfirmationEmails)")
+        print("  Order Status Updates: \(orderStatusUpdates)")
+        print("  Promotional Emails: \(promotionalEmails)")
+        print("  Weekly Newsletter: \(weeklyNewsletters)")
+        print("  Security Notifications: \(securityNotifications)")
+    }
+}
+
+struct NotificationToggleRow: View {
+    let title: String
+    let subtitle: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.body)
+                    .foregroundColor(.primary)
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+        }
+        .padding(.vertical, 4)
     }
 }

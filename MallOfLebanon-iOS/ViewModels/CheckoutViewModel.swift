@@ -14,6 +14,7 @@ class CheckoutViewModel: ObservableObject {
     @Published var placedOrder: Order?
     @Published var orderEmailSent = false
     @Published var showEmailConfirmation = false
+    @Published var showingDocumentUpload = false
 
     private var authManager: AuthenticationManager
 
@@ -56,6 +57,7 @@ class CheckoutViewModel: ObservableObject {
         self.authManager = authManager
         setupObservers()
         updateOrderSummary()
+        checkForInstallmentOrder()
     }
 
     private func setupObservers() {
@@ -92,21 +94,62 @@ class CheckoutViewModel: ObservableObject {
         )
     }
 
-    // MARK: - Step Navigation
+    // MARK: - Installment Management
 
-    func goToNextStep() {
-        if checkoutState.canProceedToNextStep {
-            let currentIndex = checkoutState.currentStep.rawValue
-            if currentIndex < CheckoutStep.allCases.count - 1 {
-                checkoutState.currentStep = CheckoutStep(rawValue: currentIndex + 1) ?? .payment
+    private func checkForInstallmentOrder() {
+        let hasInstallmentItems = cartManager.items.contains { $0.installmentPlan != nil }
+        checkoutState.isInstallmentOrder = hasInstallmentItems
+
+        if hasInstallmentItems {
+            // Get required documents from the first installment item's plan
+            if let firstInstallmentItem = cartManager.items.first(where: { $0.installmentPlan != nil }),
+               let _ = firstInstallmentItem.installmentPlan {
+                // In a real app, you'd get this from the installment plan, but for now use common requirements
+                // checkoutState.requiredDocumentTypes = [.nationalID, .salaryCertificate, .bankStatement]
+                checkoutState.requiredDocumentsCount = 1 // Only 1 document required to proceed
             }
         }
     }
 
+    // MARK: - Step Navigation
+
+    func goToNextStep() {
+        print("🚀 [DEBUG] goToNextStep() called - current step: \(checkoutState.currentStep), can proceed: \(checkoutState.canProceedToNextStep), isInstallment: \(checkoutState.isInstallmentOrder)")
+
+        if !checkoutState.canProceedToNextStep {
+            print("⚠️ [DEBUG] Cannot proceed to next step from \(checkoutState.currentStep)")
+            return
+        }
+
+        let currentIndex = checkoutState.currentStep.rawValue
+        let oldStep = checkoutState.currentStep
+
+        // Normal step progression for all cases
+        if currentIndex == 1 && !checkoutState.isInstallmentOrder { // delivery step for non-installment
+            checkoutState.currentStep = .payment
+        } else if currentIndex < CheckoutStep.allCases.count - 1 {
+            checkoutState.currentStep = CheckoutStep(rawValue: currentIndex + 1) ?? .payment
+        }
+        print("🚀 [DEBUG] Step transition: \(oldStep) -> \(checkoutState.currentStep)")
+    }
+
     func goToPreviousStep() {
         let currentIndex = checkoutState.currentStep.rawValue
+        let oldStep = checkoutState.currentStep
+
+        print("⬅️ [DEBUG] goToPreviousStep() called - current step: \(checkoutState.currentStep), index: \(currentIndex), isInstallment: \(checkoutState.isInstallmentOrder)")
+
         if currentIndex > 0 {
-            checkoutState.currentStep = CheckoutStep(rawValue: currentIndex - 1) ?? .customerInfo
+            // Skip documents step for non-installment orders when going back
+            if currentIndex == 3 && !checkoutState.isInstallmentOrder { // payment step
+                checkoutState.currentStep = .delivery
+            } else {
+                checkoutState.currentStep = CheckoutStep(rawValue: currentIndex - 1) ?? .customerInfo
+            }
+
+            print("⬅️ [DEBUG] Step transition: \(oldStep) -> \(checkoutState.currentStep)")
+        } else {
+            print("⚠️ [DEBUG] Cannot go to previous step from \(checkoutState.currentStep)")
         }
     }
 
@@ -331,7 +374,12 @@ class CheckoutViewModel: ObservableObject {
     // MARK: - Order Placement
 
     func placeOrder() {
-        guard checkoutState.canPlaceOrder else { return }
+        print("🛒 [DEBUG] placeOrder() called - current step: \(checkoutState.currentStep), canPlaceOrder: \(checkoutState.canPlaceOrder)")
+
+        guard checkoutState.canPlaceOrder else {
+            print("⚠️ [DEBUG] Cannot place order - requirements not met")
+            return
+        }
 
         Task {
             await placeOrderAsync()
@@ -343,46 +391,64 @@ class CheckoutViewModel: ObservableObject {
         checkoutState.errorMessage = nil
 
         do {
-            let orderRequest = createOrderRequest()
-            let response = try await apiService.createOrderAsync(orderRequest)
+            if checkoutState.isInstallmentOrder {
+                // For installment orders, use the installment order API
+                print("🚀 [DEBUG] Creating installment order at final submit...")
+                let success = await createInstallmentOrder()
 
-            await MainActor.run {
-                checkoutState.isProcessing = false
-
-                // Debug logging
-                print("🚚 [DEBUG] Order response received:")
-                print("🚚 [DEBUG] Success: \(response.success)")
-                print("🚚 [DEBUG] Message: \(response.message)")
-                print("🚚 [DEBUG] Order: \(response.order != nil ? "Present" : "nil")")
-                print("🚚 [DEBUG] Order Number: \(response.orderNumber ?? "nil")")
-
-                if response.success, let order = response.order {
-                    placedOrder = order
-                    showingOrderSuccess = true
-                    orderEmailSent = true
-                    showEmailConfirmation = true
-
-                    // Handle remaining items for pickup orders
-                    if checkoutState.deliveryMethod == .storePickup && selectedPickupSeller != nil && getRemainingItems().count > 0 {
-                        if remainingItemsAction == .remove {
-                            // Remove all items from cart
-                            cartManager.clearCart()
-                        } else if remainingItemsAction == .delivery {
-                            // Remove only the pickup items, keep remaining items for delivery
-                            let pickupItems = getPickupItems()
-                            pickupItems.forEach { item in
-                                cartManager.removeItem(item.id)
-                            }
-                        }
-                    } else {
-                        // Clear all items for regular orders
+                await MainActor.run {
+                    checkoutState.isProcessing = false
+                    if success {
+                        showingOrderSuccess = true
+                        orderEmailSent = true
+                        showEmailConfirmation = true
                         cartManager.clearCart()
+                        resetCheckoutState()
                     }
+                }
+            } else {
+                // For regular orders, use the regular order API
+                let orderRequest = createOrderRequest()
+                let response = try await apiService.createOrderAsync(orderRequest)
 
-                    // Reset checkout state
-                    resetCheckoutState()
-                } else {
-                    checkoutState.errorMessage = response.message
+                await MainActor.run {
+                    checkoutState.isProcessing = false
+
+                    // Debug logging
+                    print("🚚 [DEBUG] Order response received:")
+                    print("🚚 [DEBUG] Success: \(response.success)")
+                    print("🚚 [DEBUG] Message: \(response.message)")
+                    print("🚚 [DEBUG] Order: \(response.order != nil ? "Present" : "nil")")
+                    print("🚚 [DEBUG] Order Number: \(response.orderNumber ?? "nil")")
+
+                    if response.success, let order = response.order {
+                        placedOrder = order
+                        showingOrderSuccess = true
+                        orderEmailSent = true
+                        showEmailConfirmation = true
+
+                        // Handle remaining items for pickup orders
+                        if checkoutState.deliveryMethod == .storePickup && selectedPickupSeller != nil && getRemainingItems().count > 0 {
+                            if remainingItemsAction == .remove {
+                                // Remove all items from cart
+                                cartManager.clearCart()
+                            } else if remainingItemsAction == .delivery {
+                                // Remove only the pickup items, keep remaining items for delivery
+                                let pickupItems = getPickupItems()
+                                pickupItems.forEach { item in
+                                    cartManager.removeItem(item.id)
+                                }
+                            }
+                        } else {
+                            // Clear all items for regular orders
+                            cartManager.clearCart()
+                        }
+
+                        // Reset checkout state
+                        resetCheckoutState()
+                    } else {
+                        checkoutState.errorMessage = response.message
+                    }
                 }
             }
         } catch {
@@ -538,6 +604,14 @@ class CheckoutViewModel: ObservableObject {
         }
     }
 
+    var canProceedFromDocuments: Bool {
+        guard checkoutState.isInstallmentOrder else { return true }
+        // For installment orders, require at least one document to be uploaded
+        // TODO: Implement actual document upload tracking
+        // For now, we'll require that the user has interacted with the upload area
+        return true // Temporarily allowing progress until document upload is implemented
+    }
+
     var canPlaceOrderFromPayment: Bool {
         return checkoutState.canPlaceOrder && canProceedFromDelivery
     }
@@ -609,5 +683,165 @@ class CheckoutViewModel: ObservableObject {
 
         // Proceed with checkout - go to payment step
         goToStep(.payment)
+    }
+
+    // MARK: - Document Upload Methods
+
+    func uploadDocuments() {
+        print("📄 [DEBUG] uploadDocuments() called - current step: \(checkoutState.currentStep)")
+
+        // Show the document upload interface
+        showingDocumentUpload = true
+    }
+
+    func onDocumentUploadComplete() {
+        print("📄 [DEBUG] Document upload completed successfully")
+
+        // Mark documents as uploaded
+        checkoutState.uploadedDocumentsCount = checkoutState.requiredDocumentsCount
+
+        // Dismiss the upload view
+        showingDocumentUpload = false
+
+        // Move to next step
+        goToNextStep()
+    }
+
+    func simulateDocumentUpload() {
+        print("📄 [DEBUG] Starting document upload simulation...")
+
+        // Simulate upload delay
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+
+            await MainActor.run {
+                print("📄 [DEBUG] Document upload simulation completed")
+                onDocumentUploadComplete()
+            }
+        }
+    }
+
+    func createInstallmentOrder() async -> Bool {
+        guard checkoutState.isInstallmentOrder else { return true }
+
+        do {
+            // Create installment order request
+            let installmentOrderRequest = createInstallmentOrderRequest()
+            // Create shipping address request if needed
+            let shippingAddressRequest: ShippingAddressRequest?
+            if checkoutState.deliveryMethod == .homeDelivery {
+                shippingAddressRequest = ShippingAddressRequest(
+                    country: country,
+                    city: city,
+                    street: address,
+                    postcode: postalCode,
+                    notes: additionalInfo.isEmpty ? nil : additionalInfo
+                )
+            } else {
+                shippingAddressRequest = nil
+            }
+
+            let response = try await apiService.createInstallmentOrderAsync(installmentOrderRequest, deliveryMethod: checkoutState.deliveryMethod, shippingAddress: shippingAddressRequest, userId: authManager.currentUser?.id)
+
+            let success = await MainActor.run {
+                if response.success {
+                    // Use actual installment order ID from response
+                    checkoutState.installmentOrderId = response.installmentOrderId
+                    print("✅ [DEBUG] Installment order created successfully with ID: \(response.installmentOrderId ?? "none")")
+                    return true
+                } else {
+                    checkoutState.errorMessage = response.message.isEmpty ? "Failed to create installment order" : response.message
+                    print("❌ [DEBUG] Installment order creation failed: \(response.message)")
+                    return false
+                }
+            }
+            return success
+        } catch {
+            await MainActor.run {
+                checkoutState.errorMessage = "Failed to create installment order: \(error.localizedDescription)"
+                print("❌ [DEBUG] Installment order creation error: \(error.localizedDescription)")
+            }
+            return false
+        }
+    }
+
+    func uploadDocument(data: Data, fileName: String, documentType: String) async -> Bool {
+        // Temporarily commented for build - will be implemented with proper types
+        // guard let installmentOrderId = checkoutState.installmentOrderId else { return false }
+
+        // do {
+        //     let documentFile = DocumentFile(
+        //         file: data,
+        //         fileName: fileName,
+        //         mimeType: mimeTypeForFile(fileName),
+        //         documentType: documentType
+        //     )
+
+        //     let uploadRequest = DocumentUploadRequest(
+        //         installmentOrderId: installmentOrderId,
+        //         documents: [documentFile]
+        //     )
+
+        //     let response = try await apiService.uploadDocumentsAsync(uploadRequest)
+
+        //     await MainActor.run {
+        //         if response.success, let uploadedDocs = response.uploadedDocuments {
+        //             checkoutState.uploadedDocuments.append(contentsOf: uploadedDocs)
+        //             return true
+        //         } else {
+        //             checkoutState.errorMessage = response.message ?? "Failed to upload document"
+        //             return false
+        //         }
+        //     }
+        // } catch {
+        //     await MainActor.run {
+        //         checkoutState.errorMessage = "Failed to upload document: \(error.localizedDescription)"
+        //     }
+        //     return false
+        // }
+
+        return false
+    }
+
+    private func createInstallmentOrderRequest() -> CreateInstallmentOrderRequest {
+        guard let customerInfo = checkoutState.customerInfo,
+              let firstInstallmentItem = cartManager.items.first(where: { $0.installmentPlan != nil }),
+              let installmentPlan = firstInstallmentItem.installmentPlan else {
+            fatalError("Missing required data for installment order creation")
+        }
+
+        return CreateInstallmentOrderRequest(
+            customer: CustomerInfoRequest(
+                name: customerInfo.fullName,
+                email: customerInfo.email,
+                phone: customerInfo.phone
+            ),
+            productId: firstInstallmentItem.productId,
+            productName: firstInstallmentItem.name,
+            productSku: firstInstallmentItem.sku,
+            sellerId: firstInstallmentItem.sellerId,
+            sellerName: firstInstallmentItem.sellerName,
+            planId: installmentPlan.planId,
+            planName: installmentPlan.planName,
+            quantity: firstInstallmentItem.quantity,
+            unitPrice: firstInstallmentItem.price,
+            totalPrice: firstInstallmentItem.total,
+            downPaymentAmount: installmentPlan.downPayment,
+            monthlyAmount: installmentPlan.monthlyPayment,
+            totalAmount: installmentPlan.totalAmount,
+            processingFee: installmentPlan.processingFee
+        )
+    }
+
+    private func mimeTypeForFile(_ fileName: String) -> String {
+        let fileExtension = (fileName as NSString).pathExtension.lowercased()
+        switch fileExtension {
+        case "jpg", "jpeg": return "image/jpeg"
+        case "png": return "image/png"
+        case "pdf": return "application/pdf"
+        case "doc": return "application/msword"
+        case "docx": return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        default: return "application/octet-stream"
+        }
     }
 }

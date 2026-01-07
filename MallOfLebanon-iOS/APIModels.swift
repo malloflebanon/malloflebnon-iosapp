@@ -453,6 +453,7 @@ enum DeliveryMethod: String, Codable, CaseIterable {
 // MARK: - Payment Method Models
 enum PaymentMethod: String, Codable, CaseIterable {
     case cashOnDelivery = "cod"
+    case installment = "installment"
 
     // Custom decoder to handle backend's different values
     init(from decoder: Decoder) throws {
@@ -462,6 +463,8 @@ enum PaymentMethod: String, Codable, CaseIterable {
         switch value {
         case "cod", "cash_on_delivery", "COD":
             self = .cashOnDelivery
+        case "installment", "installments":
+            self = .installment
         default:
             throw DecodingError.dataCorrupted(
                 DecodingError.Context(codingPath: decoder.codingPath,
@@ -473,6 +476,7 @@ enum PaymentMethod: String, Codable, CaseIterable {
     var title: String {
         switch self {
         case .cashOnDelivery: return "Cash on Delivery"
+        case .installment: return "Installment Payment"
         }
     }
 
@@ -480,12 +484,15 @@ enum PaymentMethod: String, Codable, CaseIterable {
         switch self {
         case .cashOnDelivery:
             return deliveryMethod == .storePickup ? "Cash on Pickup" : "Cash on Delivery"
+        case .installment:
+            return "Installment Payment"
         }
     }
 
     var description: String {
         switch self {
         case .cashOnDelivery: return "Pay when you receive your order"
+        case .installment: return "Pay in monthly installments with down payment"
         }
     }
 
@@ -493,12 +500,15 @@ enum PaymentMethod: String, Codable, CaseIterable {
         switch self {
         case .cashOnDelivery:
             return deliveryMethod == .storePickup ? "Pay when you pick up your order" : "Pay when you receive your order"
+        case .installment:
+            return "Pay in monthly installments with down payment"
         }
     }
 
     var icon: String {
         switch self {
         case .cashOnDelivery: return "banknote"
+        case .installment: return "creditcard"
         }
     }
 }
@@ -597,6 +607,88 @@ struct CreateOrderResponse: Codable {
     let orderNumber: String?
 }
 
+// MARK: - Installment Order Creation Models
+struct CreateInstallmentOrderRequest: Codable {
+    let customer: CustomerInfoRequest
+    let productId: String
+    let productName: String
+    let productSku: String
+    let sellerId: String
+    let sellerName: String
+    let planId: String
+    let planName: String
+    let quantity: Int
+    let unitPrice: Double
+    let totalPrice: Double
+    let downPaymentAmount: Double
+    let monthlyAmount: Double
+    let totalAmount: Double
+    let processingFee: Double
+}
+
+struct CustomerInfoRequest: Codable {
+    let name: String
+    let email: String
+    let phone: String
+}
+
+struct ErrorResponse: Codable {
+    let success: Bool
+    let message: String
+    let error: String?
+}
+
+// MARK: - Installment Response Models
+struct InstallmentOrderResponse: Codable {
+    let success: Bool
+    let message: String
+    let installmentOrderId: String?
+    let orderNumber: String?
+    let order: Order?
+    // Note: order details handled separately to avoid circular dependencies
+}
+
+struct OrderResponse: Codable {
+    let success: Bool
+    let message: String
+    let order: Order?
+    let orderId: String?
+    let walletPayment: WalletPayment?
+    // Note: installmentOrders handled separately to avoid circular dependencies
+}
+
+struct WalletPayment: Codable {
+    let amountUsed: Double?
+    let newBalance: Double?
+    // Add other wallet payment fields as needed
+}
+
+struct DocumentUploadResponse: Codable {
+    let success: Bool
+    let message: String
+    // Note: document details handled separately to avoid circular dependencies
+}
+
+struct DocumentUploadRequest: Codable {
+    let installmentOrderId: String
+    let documents: [SimpleDocumentFile]
+
+    enum CodingKeys: String, CodingKey {
+        case installmentOrderId, documents
+    }
+}
+
+struct SimpleDocumentFile: Codable {
+    let fileName: String
+    let mimeType: String
+    let file: Data
+    let documentType: String
+
+    enum CodingKeys: String, CodingKey {
+        case fileName, mimeType, file, documentType
+    }
+}
+
 // MARK: - Checkout State Models
 struct CheckoutState {
     var currentStep: CheckoutStep = .customerInfo
@@ -608,15 +700,33 @@ struct CheckoutState {
     var isProcessing: Bool = false
     var errorMessage: String?
 
+    // Installment-related properties
+    var isInstallmentOrder: Bool = false
+    var installmentOrderId: String?
+    // Note: Document types handled separately to avoid circular dependencies
+    var uploadedDocumentsCount: Int = 0
+    var requiredDocumentsCount: Int = 0
+
     var canProceedToNextStep: Bool {
         switch currentStep {
         case .customerInfo:
             return customerInfo != nil
         case .delivery:
             return true
+        case .documents:
+            // For installment orders, all required documents must be uploaded
+            return !isInstallmentOrder || (isInstallmentOrder && areAllDocumentsUploaded)
         case .payment:
             return true
         }
+    }
+
+    // Check if all required documents are uploaded
+    var areAllDocumentsUploaded: Bool {
+        guard isInstallmentOrder else { return true }
+
+        // Simplified check using counts (detailed logic handled elsewhere)
+        return uploadedDocumentsCount >= requiredDocumentsCount
     }
 
     var canPlaceOrder: Bool {
@@ -627,12 +737,14 @@ struct CheckoutState {
 enum CheckoutStep: Int, CaseIterable {
     case customerInfo = 0
     case delivery = 1
-    case payment = 2
+    case documents = 2
+    case payment = 3
 
     var title: String {
         switch self {
         case .customerInfo: return "Customer Info"
         case .delivery: return "Delivery"
+        case .documents: return "Documents"
         case .payment: return "Payment"
         }
     }
@@ -641,6 +753,7 @@ enum CheckoutStep: Int, CaseIterable {
         switch self {
         case .customerInfo: return "person"
         case .delivery: return "truck"
+        case .documents: return "doc.text"
         case .payment: return "creditcard"
         }
     }
@@ -688,26 +801,26 @@ struct Review: Codable, Identifiable {
 }
 
 // MARK: - Error Models
-struct APIError: Error, LocalizedError, Codable {
-    let message: String
-    let code: String?
+enum APIError: Error, LocalizedError {
+    case serverError(String)
+    case networkError(String)
+    case decodingError(String)
+    case invalidResponse
+    case missingData
 
-    init(message: String, code: String? = nil) {
-        self.message = message
-        self.code = code
-    }
-
-    // Conform to LocalizedError protocol
     var errorDescription: String? {
-        return message
-    }
-
-    var failureReason: String? {
-        return message
-    }
-
-    var localizedDescription: String {
-        return message
+        switch self {
+        case .serverError(let message):
+            return message
+        case .networkError(let message):
+            return "Network error: \(message)"
+        case .decodingError(let message):
+            return "Data parsing error: \(message)"
+        case .invalidResponse:
+            return "Invalid server response"
+        case .missingData:
+            return "Missing required data"
+        }
     }
 }
 

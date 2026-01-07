@@ -1,5 +1,64 @@
 import Foundation
 
+// MARK: - Installment Plan Selection
+struct InstallmentPlanSelection: Codable, Equatable {
+    let planId: String
+    let planName: String
+    let duration: Int
+    let downPaymentPercentage: Double
+    let interestRate: Double
+    let minimumOrderAmount: Double
+    let downPayment: Double
+    let monthlyPayment: Double
+    let totalAmount: Double
+    let totalInterest: Double
+    let processingFee: Double
+    let description: String?
+
+    var displayName: String {
+        return "\(planName) - \(duration) months"
+    }
+
+}
+
+// MARK: - Cart Type
+enum CartType {
+    case empty
+    case regular
+    case installment
+
+    var displayName: String {
+        switch self {
+        case .empty: return "Empty"
+        case .regular: return "Regular"
+        case .installment: return "Installment"
+        }
+    }
+}
+
+// MARK: - Cart Conflict Info
+struct CartConflictInfo {
+    let hasConflict: Bool
+    let cartType: CartType
+    let conflictingItem: CartItem?
+    let message: String
+
+    static let noConflict = CartConflictInfo(
+        hasConflict: false,
+        cartType: .empty,
+        conflictingItem: nil,
+        message: ""
+    )
+}
+
+// MARK: - Cart Conflict Actions
+enum CartConflictAction {
+    case clearCartAndAdd
+    case clearCartAndBuyNow
+    case continueToCheckout
+    case cancel
+}
+
 struct CartItem: Codable, Identifiable {
     let id: String
     let productId: String
@@ -13,6 +72,10 @@ struct CartItem: Codable, Identifiable {
     let sellerName: String
     let customizations: [CustomizationSelection]?
     let maxStock: Int
+
+    // Installment support
+    let installmentPlan: InstallmentPlanSelection?
+    let hasInstallmentPlan: Bool
 
     var total: Double {
         return price * Double(quantity)
@@ -95,7 +158,13 @@ struct Cart: Codable {
     }
 
     mutating func addItem(_ item: CartItem) {
-        if let existingIndex = items.firstIndex(where: { $0.productId == item.productId && $0.sellerId == item.sellerId }) {
+        // For installment items, need to check both product and installment plan for uniqueness
+        let matchingItem = items.first { existingItem in
+            existingItem.productId == item.productId &&
+            existingItem.sellerId == item.sellerId
+        }
+
+        if let existingIndex = items.firstIndex(where: { $0.id == matchingItem?.id }) {
             items[existingIndex].quantity += item.quantity
             if items[existingIndex].quantity > items[existingIndex].maxStock {
                 items[existingIndex].quantity = items[existingIndex].maxStock
@@ -126,6 +195,41 @@ struct Cart: Codable {
     func getSellerNames() -> [String] {
         let sellerNames = Set(items.map { $0.sellerName })
         return Array(sellerNames).sorted()
+    }
+
+    // MARK: - Installment Support
+    var cartType: CartType {
+        if items.isEmpty {
+            return .empty
+        }
+
+        let hasInstallmentItems = items.contains { $0.hasInstallmentPlan }
+        return hasInstallmentItems ? .installment : .regular
+    }
+
+    func checkCartConflict(hasInstallmentPlan: Bool) -> CartConflictInfo {
+        let currentCartType = cartType
+        let attemptingToAdd: CartType = hasInstallmentPlan ? .installment : .regular
+
+        // No conflict if cart is empty
+        if currentCartType == .empty {
+            return CartConflictInfo(
+                hasConflict: false,
+                cartType: .empty,
+                conflictingItem: nil,
+                message: "No conflict"
+            )
+        }
+
+        // Conflict exists if trying to add different payment type to non-empty cart
+        let hasConflict = currentCartType != attemptingToAdd
+
+        return CartConflictInfo(
+            hasConflict: hasConflict,
+            cartType: currentCartType,
+            conflictingItem: items.first,
+            message: hasConflict ? "Cannot mix regular and installment items in cart" : "No conflict"
+        )
     }
 }
 
@@ -174,20 +278,42 @@ struct AddToCartRequest {
 }
 
 extension CartItem {
-    static func fromProduct(_ product: Product, quantity: Int = 1, customizations: [CustomizationSelection]? = nil) -> CartItem {
+    static func fromProduct(
+        _ product: Product,
+        quantity: Int = 1,
+        customizations: [CustomizationSelection]? = nil,
+        installmentPlan: InstallmentPlanSelection? = nil
+    ) -> CartItem {
+        // Generate unique ID based on product, customizations, and installment plan
+        let customizationHash = customizations?.map { "\($0.customizationId)_\($0.optionId)" }.joined(separator: "|") ?? "no_customizations"
+        let installmentHash = installmentPlan?.planId ?? "no_installment"
+        let itemId = "\(product.id)_\(product.sellerId)_\(customizationHash)_\(installmentHash)"
+
+        // Calculate base price including customization modifiers
+        let basePrice = product.price
+        let customizationPrice = customizations?.reduce(0) { total, customization in
+            total + customization.priceModifier
+        } ?? 0
+        let totalProductPrice = basePrice + customizationPrice
+
+        // For installment plans, show down payment as the cart price
+        let displayPrice = installmentPlan?.downPayment ?? totalProductPrice
+
         return CartItem(
-            id: UUID().uuidString,
+            id: itemId,
             productId: product.id,
             sellerId: product.sellerId,
             name: product.name,
-            price: product.price,
+            price: displayPrice,
             originalPrice: product.originalPrice,
             image: product.mainImage,
             quantity: quantity,
             sku: product.sku,
             sellerName: product.sellerName,
             customizations: customizations,
-            maxStock: product.stockCount
+            maxStock: product.stockCount,
+            installmentPlan: installmentPlan,
+            hasInstallmentPlan: installmentPlan != nil
         )
     }
 }

@@ -41,6 +41,17 @@ struct ProductDetailView: View {
                             Divider()
                         }
 
+                        // Installment Plans
+                        if viewModel.hasInstallmentPlans {
+                            InstallmentPlansSection(
+                                calculatedPrice: viewModel.calculatedPrice,
+                                selectedInstallmentPlan: $viewModel.selectedInstallmentPlan,
+                                showInstallmentPlans: $viewModel.showInstallmentPlans
+                            )
+
+                            Divider()
+                        }
+
                         // Stock and Purchase Section
                         ProductPurchaseSection(
                             product: product,
@@ -99,6 +110,25 @@ struct ProductDetailView: View {
         } message: {
             Text(viewModel.errorMessage ?? "")
         }
+        .overlay(
+            // Cart Conflict Modal
+            Group {
+                if viewModel.showCartConflictModal, let conflictInfo = viewModel.cartConflictInfo {
+                    CartConflictModalView(
+                        conflictInfo: conflictInfo,
+                        onClearCartAndAdd: {
+                            viewModel.handleCartConflictAction(.clearCartAndAdd)
+                        },
+                        onContinueToCheckout: {
+                            viewModel.handleCartConflictAction(.continueToCheckout)
+                        },
+                        onCancel: {
+                            viewModel.handleCartConflictAction(.cancel)
+                        }
+                    )
+                }
+            }
+        )
         .fullScreenCover(isPresented: $viewModel.showingImageViewer) {
             if let product = viewModel.product {
                 ProductImageViewer(
@@ -152,35 +182,52 @@ struct ProductDetailView: View {
     }
 
     private func addToCart() {
-        guard let product = viewModel.product else { return }
+        NSLog("🛒 [MallOfLebanon] Adding product to cart with installment support")
 
-        // Create cart item with customizations
-        let selectedCustomizations = getSelectedCustomizationDetails()
-
-        // Debug logging
-        print("🛒 [DEBUG] Adding to cart - customizations: \(selectedCustomizations)")
-        for customization in selectedCustomizations {
-            print("🛒 [DEBUG] Customization: \(customization.customizationName), Option: \(customization.optionLabel), Value: \(customization.optionValue)")
+        guard let product = viewModel.product else {
+            NSLog("❌ [MallOfLebanon] Cannot add to cart - product is nil")
+            return
         }
 
-        let cartProduct = CartProductItem(
-            product: product,
-            selectedCustomizations: selectedCustomizations,
-            calculatedPrice: viewModel.calculatedPrice
-        )
+        // Validate that product can be added to cart
+        guard viewModel.canAddToCart() else {
+            NSLog("❌ [MallOfLebanon] Cannot add to cart - validation failed")
+            return
+        }
 
-        cartManager.addProduct(cartProduct, quantity: viewModel.quantity)
+        // Use the new installment-aware add to cart method
+        viewModel.addToCartWithInstallment()
 
         // Show success feedback
         let impact = UIImpactFeedbackGenerator(style: .medium)
         impact.impactOccurred()
+
+        // Reset quantity after adding to cart
+        viewModel.quantity = 1
     }
 
     private func buyNow() {
-        addToCart()
-        // Navigate directly to checkout
-        // This would typically be handled by the navigation coordinator
-        // For now, we'll just add to cart and let user navigate manually
+        NSLog("🛒 [MallOfLebanon] Buy now with installment support")
+
+        guard let product = viewModel.product else {
+            NSLog("❌ [MallOfLebanon] Cannot buy now - product is nil")
+            return
+        }
+
+        // Validate that product can be added to cart
+        guard viewModel.canAddToCart() else {
+            NSLog("❌ [MallOfLebanon] Cannot buy now - validation failed")
+            return
+        }
+
+        // Use the new installment-aware buy now method
+        viewModel.buyNowWithInstallment()
+
+        // Show success feedback
+        let impact = UIImpactFeedbackGenerator(style: .medium)
+        impact.impactOccurred()
+
+        // Navigate to checkout (for now just dismiss)
         presentationMode.wrappedValue.dismiss()
     }
 
@@ -466,6 +513,333 @@ struct ProductDetailView_Previews: PreviewProvider {
         NavigationView {
             ProductDetailView(productId: "sample-product-id")
                 .environmentObject(CartManager.shared)
+        }
+    }
+}
+
+// MARK: - Inline Installment Components
+
+// Simple InstallmentPlan struct for UI purposes
+struct SimpleInstallmentPlan: Identifiable {
+    let id: String
+    let planName: String
+    let duration: Int
+    let downPaymentPercentage: Double
+    let interestRate: Double
+    let minimumOrderAmount: Double
+    let processingFeePercentage: Double
+    let description: String?
+
+    func calculatePayments(orderAmount: Double) -> InstallmentCalculation {
+        let downPayment = orderAmount * (downPaymentPercentage / 100)
+        let remainingAmount = orderAmount - downPayment
+        let processingFee = orderAmount * (processingFeePercentage / 100)
+        let totalInterest = remainingAmount * (interestRate / 100) * Double(duration) / 12
+        let totalAmount = orderAmount + totalInterest + processingFee
+        let monthlyPayment = (remainingAmount + totalInterest) / Double(duration)
+
+        return InstallmentCalculation(
+            downPayment: downPayment,
+            monthlyPayment: monthlyPayment,
+            totalAmount: totalAmount,
+            totalInterest: totalInterest,
+            processingFee: processingFee
+        )
+    }
+}
+
+struct InstallmentCalculation {
+    let downPayment: Double
+    let monthlyPayment: Double
+    let totalAmount: Double
+    let totalInterest: Double
+    let processingFee: Double
+}
+
+struct InstallmentPlansSection: View {
+    let calculatedPrice: Double
+    @Binding var selectedInstallmentPlan: InstallmentPlanSelection?
+    @Binding var showInstallmentPlans: Bool
+
+    private var eligiblePlans: [SimpleInstallmentPlan] {
+        // Sample installment plans - in production this would come from the product or API
+        let allPlans = [
+            SimpleInstallmentPlan(
+                id: "plan_3m",
+                planName: "3 Month Plan",
+                duration: 3,
+                downPaymentPercentage: 30.0,
+                interestRate: 3.0,
+                minimumOrderAmount: 200.0,
+                processingFeePercentage: 1.5,
+                description: "Quick payment plan for smaller purchases"
+            ),
+            SimpleInstallmentPlan(
+                id: "plan_6m",
+                planName: "6 Month Plan",
+                duration: 6,
+                downPaymentPercentage: 20.0,
+                interestRate: 5.0,
+                minimumOrderAmount: 500.0,
+                processingFeePercentage: 2.0,
+                description: "Perfect for short-term financing"
+            ),
+            SimpleInstallmentPlan(
+                id: "plan_12m",
+                planName: "12 Month Plan",
+                duration: 12,
+                downPaymentPercentage: 15.0,
+                interestRate: 8.0,
+                minimumOrderAmount: 1000.0,
+                processingFeePercentage: 2.5,
+                description: "Popular choice for larger purchases"
+            )
+        ]
+
+        return allPlans.filter { $0.minimumOrderAmount <= calculatedPrice }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "creditcard.fill")
+                    .foregroundColor(.blue)
+                Text("Installment Plans Available")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
+
+                Button(action: {
+                    showInstallmentPlans.toggle()
+                }) {
+                    Image(systemName: showInstallmentPlans ? "chevron.up" : "chevron.down")
+                        .foregroundColor(.blue)
+                }
+            }
+            .padding(.horizontal)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                showInstallmentPlans.toggle()
+            }
+
+            if showInstallmentPlans {
+                VStack(spacing: 12) {
+                    ForEach(eligiblePlans) { plan in
+                        InstallmentPlanRowView(
+                            plan: plan,
+                            calculatedPrice: calculatedPrice,
+                            isSelected: selectedInstallmentPlan?.planId == plan.id,
+                            onSelect: {
+                                selectPlan(plan)
+                            }
+                        )
+                    }
+
+                    if eligiblePlans.isEmpty {
+                        VStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .foregroundColor(.orange)
+                                .font(.title2)
+                            Text("No installment plans available for this amount")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                            Text("Minimum order amount: $200.00")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding()
+                        .background(Color.orange.opacity(0.1))
+                        .cornerRadius(8)
+                    }
+                }
+                .padding(.horizontal)
+            }
+        }
+        .padding(.vertical, 8)
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+
+    private func selectPlan(_ plan: SimpleInstallmentPlan) {
+        let calculation = plan.calculatePayments(orderAmount: calculatedPrice)
+
+        selectedInstallmentPlan = InstallmentPlanSelection(
+            planId: plan.id,
+            planName: plan.planName,
+            duration: plan.duration,
+            downPaymentPercentage: plan.downPaymentPercentage,
+            interestRate: plan.interestRate,
+            minimumOrderAmount: plan.minimumOrderAmount,
+            downPayment: calculation.downPayment,
+            monthlyPayment: calculation.monthlyPayment,
+            totalAmount: calculation.totalAmount,
+            totalInterest: calculation.totalInterest,
+            processingFee: calculation.processingFee,
+            description: plan.description
+        )
+    }
+}
+
+struct InstallmentPlanRowView: View {
+    let plan: SimpleInstallmentPlan
+    let calculatedPrice: Double
+    let isSelected: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        let calculation = plan.calculatePayments(orderAmount: calculatedPrice)
+
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(plan.planName)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+
+                    Text("\(plan.duration) months • \(plan.interestRate, specifier: "%.1f")% interest")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("$\(calculation.monthlyPayment, specifier: "%.2f")")
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.blue)
+
+                    Text("per month")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Down Payment: $\(calculation.downPayment, specifier: "%.2f")")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Spacer()
+                    Text("(\(plan.downPaymentPercentage, specifier: "%.0f")%)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                HStack {
+                    Text("Total Amount: $\(calculation.totalAmount, specifier: "%.2f")")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Spacer()
+                    Text("includes $\(calculation.totalInterest, specifier: "%.2f") interest")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(.leading, 8)
+
+            if let description = plan.description, !description.isEmpty {
+                Text(description)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.leading, 8)
+            }
+
+            Button(action: onSelect) {
+                HStack {
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .foregroundColor(isSelected ? .blue : .gray)
+
+                    Text(isSelected ? "Selected" : "Select Plan")
+                        .fontWeight(isSelected ? .semibold : .medium)
+
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(isSelected ? Color.blue.opacity(0.1) : Color.gray.opacity(0.1))
+                .cornerRadius(8)
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+        .padding()
+        .background(isSelected ? Color.blue.opacity(0.05) : Color(.systemGray6))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 2)
+        )
+    }
+}
+
+struct CartConflictModalView: View {
+    let conflictInfo: CartConflictInfo
+    let onClearCartAndAdd: () -> Void
+    let onContinueToCheckout: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.4)
+                .edgesIgnoringSafeArea(.all)
+                .onTapGesture {
+                    onCancel()
+                }
+
+            VStack(spacing: 20) {
+                VStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 40))
+                        .foregroundColor(.orange)
+
+                    Text("Cart Conflict")
+                        .font(.title2)
+                        .fontWeight(.bold)
+
+                    Text(conflictInfo.message)
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+
+                VStack(spacing: 12) {
+                    Button("Clear Cart & Add Item") {
+                        onClearCartAndAdd()
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.red)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+
+                    Button("Continue to Checkout") {
+                        onContinueToCheckout()
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+
+                    Button("Cancel") {
+                        onCancel()
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color(.systemGray5))
+                    .foregroundColor(.primary)
+                    .cornerRadius(10)
+                }
+                .padding(.horizontal, 20)
+            }
+            .padding(20)
+            .background(Color(.systemBackground))
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
+            .padding(.horizontal, 24)
         }
     }
 }

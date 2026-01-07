@@ -52,6 +52,71 @@ class CartManager: ObservableObject {
         print("Cart: Total items in cart: \(cartSummary.itemCount)")
     }
 
+    // MARK: - Installment Support
+    func addProductWithInstallment(
+        _ product: Product,
+        quantity: Int = 1,
+        customizations: [CustomizationSelection]? = nil,
+        installmentPlan: InstallmentPlanSelection? = nil
+    ) {
+        let newItem = CartItem.fromProduct(
+            product,
+            quantity: quantity,
+            customizations: customizations,
+            installmentPlan: installmentPlan
+        )
+
+        // Check if item with same configuration already exists
+        if let existingIndex = items.firstIndex(where: { $0.id == newItem.id }) {
+            // Update quantity of existing item
+            items[existingIndex].quantity += newItem.quantity
+        } else {
+            // Add new item
+            items.append(newItem)
+        }
+
+        let installmentText = installmentPlan != nil ? " with \(installmentPlan!.planName)" : ""
+        print("Cart: Added \(newItem.name) (Qty: \(newItem.quantity))\(installmentText) to cart")
+        print("Cart: Total items in cart: \(cartSummary.itemCount)")
+    }
+
+    func checkCartConflict(hasInstallmentPlan: Bool) -> CartConflictInfo {
+        return cart.checkCartConflict(hasInstallmentPlan: hasInstallmentPlan)
+    }
+
+    var cartType: CartType {
+        return cart.cartType
+    }
+
+    func updateInstallmentPlan(itemId: String, installmentPlan: InstallmentPlanSelection?) {
+        guard let index = items.firstIndex(where: { $0.id == itemId }) else { return }
+
+        let currentItem = items[index]
+
+        // Create new item with updated installment plan
+        let updatedItem = CartItem(
+            id: currentItem.id,
+            productId: currentItem.productId,
+            sellerId: currentItem.sellerId,
+            name: currentItem.name,
+            price: installmentPlan?.downPayment ?? currentItem.originalPrice ?? currentItem.price,
+            originalPrice: currentItem.originalPrice,
+            image: currentItem.image,
+            quantity: currentItem.quantity,
+            sku: currentItem.sku,
+            sellerName: currentItem.sellerName,
+            customizations: currentItem.customizations,
+            maxStock: currentItem.maxStock,
+            installmentPlan: installmentPlan,
+            hasInstallmentPlan: installmentPlan != nil
+        )
+
+        items[index] = updatedItem
+
+        let installmentText = installmentPlan != nil ? " with \(installmentPlan!.planName)" : " (removed installment)"
+        print("Cart: Updated \(updatedItem.name)\(installmentText)")
+    }
+
     func addProduct(_ product: Product, quantity: Int = 1, customizations: [CustomizationSelection] = []) {
         let request = AddToCartRequest(product: product, quantity: quantity, customizations: customizations)
         addItem(request)
@@ -74,7 +139,9 @@ class CartManager: ObservableObject {
             sku: cartProduct.product.sku,
             sellerName: cartProduct.product.sellerName,
             customizations: customizations,
-            maxStock: cartProduct.product.stockCount
+            maxStock: cartProduct.product.stockCount,
+            installmentPlan: nil,
+            hasInstallmentPlan: false
         )
 
         // Check if item with same configuration already exists

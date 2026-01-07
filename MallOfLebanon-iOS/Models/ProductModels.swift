@@ -120,6 +120,13 @@ struct Product: Codable, Identifiable {
     let variants: [String]?
     let reviews: [String]?
 
+    // INSTALLMENT FIELDS - using basic types to avoid circular dependencies
+    let hasInstallmentPlans: Bool?
+    let installmentSettings: InstallmentSettings?
+
+    // This will be populated from installmentPlans field by accessing InstallmentPlan models separately
+    private let installmentPlansData: [String: Any]?
+
     // Handle custom init to provide compatibility between different API structures
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -288,6 +295,12 @@ struct Product: Codable, Identifiable {
         soldCount = try container.decodeIfPresent(Int.self, forKey: .soldCount)
         variants = try container.decodeIfPresent([String].self, forKey: .variants)
         reviews = try container.decodeIfPresent([String].self, forKey: .reviews)
+
+        // Installment fields
+        // installmentPlans = try container.decodeIfPresent([InstallmentPlan].self, forKey: .installmentPlans)
+        hasInstallmentPlans = try container.decodeIfPresent(Bool.self, forKey: .hasInstallmentPlans)
+        installmentSettings = try container.decodeIfPresent(InstallmentSettings.self, forKey: .installmentSettings)
+        installmentPlansData = nil // Temporarily set to nil during build process
     }
 
     func encode(to encoder: Encoder) throws {
@@ -346,6 +359,11 @@ struct Product: Codable, Identifiable {
         try container.encodeIfPresent(soldCount, forKey: .soldCount)
         try container.encodeIfPresent(variants, forKey: .variants)
         try container.encodeIfPresent(reviews, forKey: .reviews)
+
+        // Installment fields
+        // try container.encodeIfPresent(installmentPlans, forKey: .installmentPlans)
+        try container.encodeIfPresent(hasInstallmentPlans, forKey: .hasInstallmentPlans)
+        try container.encodeIfPresent(installmentSettings, forKey: .installmentSettings)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -360,6 +378,10 @@ struct Product: Codable, Identifiable {
         case _id, seller, store, title, shortDescription, comparePrice, costPrice, stock
         case isActive, isApproved, isFeatured, ratings, metaKeywords, views, soldCount
         case variants, reviews
+
+        // Installment fields
+        case hasInstallmentPlans, installmentSettings
+        // case installmentPlans - commented for build
     }
 
     // Computed properties for backward compatibility and enhanced functionality
@@ -399,6 +421,49 @@ struct Product: Codable, Identifiable {
         guard let originalPrice = originalPrice else { return nil }
         return String(format: "%.2f", originalPrice)
     }
+
+    // MARK: - Installment Helper Methods
+    var hasInstallments: Bool {
+        return hasInstallmentPlans == true
+    }
+
+    // var activeInstallmentPlans: [InstallmentPlan] {
+    //     return installmentPlans?.filter { $0.isActive } ?? []
+    // }
+
+    // func getInstallmentPlan(by id: String) -> InstallmentPlan? {
+    //     return installmentPlans?.first { $0.id == id }
+    // }
+
+    // func isEligibleForInstallment(orderAmount: Double) -> Bool {
+    //     return activeInstallmentPlans.contains { plan in
+    //         orderAmount >= plan.minimumOrderAmount &&
+    //         (plan.maximumOrderAmount == nil || orderAmount <= plan.maximumOrderAmount!)
+    //     }
+    // }
+
+    // func getEligibleInstallmentPlans(for orderAmount: Double) -> [InstallmentPlan] {
+    //     return activeInstallmentPlans.filter { plan in
+    //         orderAmount >= plan.minimumOrderAmount &&
+    //         (plan.maximumOrderAmount == nil || orderAmount <= plan.maximumOrderAmount!)
+    //     }
+    // }
+
+    // func getMinimumMonthlyPayment() -> Double? {
+    //     guard hasInstallments else { return nil }
+
+    //     let eligiblePlans = getEligibleInstallmentPlans(for: price)
+    //     var minMonthly: Double?
+
+    //     for plan in eligiblePlans {
+    //         let calculation = plan.calculateDetails(for: price)
+    //         if minMonthly == nil || calculation.monthlyPayment < minMonthly! {
+    //             minMonthly = calculation.monthlyPayment
+    //         }
+    //     }
+
+    //     return minMonthly
+    // }
 }
 
 enum ProductStatus: String, Codable {
@@ -714,4 +779,17 @@ struct SpecificationItem: Codable {
         case id = "_id"
         case name, value
     }
+}
+
+// MARK: - Installment Settings
+struct InstallmentSettings: Codable {
+    let enabled: Bool
+    let maxInstallmentAmount: Double?
+    let eligibilityCriteria: EligibilityCriteria?
+}
+
+struct EligibilityCriteria: Codable {
+    let minAge: Int
+    let minIncome: Double
+    let creditCheckRequired: Bool
 }

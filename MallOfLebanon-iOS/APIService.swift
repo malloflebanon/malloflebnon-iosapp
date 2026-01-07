@@ -4,7 +4,7 @@ import Combine
 class APIService: ObservableObject {
     static let shared = APIService()
 
-    private let baseURL = "http://192.168.10.183:3007/api"
+    private let baseURL = "http://192.168.10.164:3007/api"
     private let session: URLSession
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
@@ -51,7 +51,7 @@ class APIService: ObservableObject {
         maxRetries: Int = 3
     ) -> AnyPublisher<T, APIError> {
         guard let url = URL(string: "\(baseURL)\(endpoint)") else {
-            return Fail(error: APIError(message: "Invalid URL"))
+            return Fail(error: APIError.serverError( "Invalid URL"))
                 .eraseToAnyPublisher()
         }
 
@@ -72,24 +72,24 @@ class APIService: ObservableObject {
             .retry(maxRetries)
             .tryMap { data, response -> Data in
                 guard let httpResponse = response as? HTTPURLResponse else {
-                    throw APIError(message: "Invalid response")
+                    throw APIError.serverError( "Invalid response")
                 }
 
                 guard 200...299 ~= httpResponse.statusCode else {
                     // Try to decode as a standard API response first
                     if let errorData = try? self.decoder.decode(APIResponse<String>.self, from: data) {
-                        throw APIError(message: errorData.message, code: "\(httpResponse.statusCode)")
+                        throw APIError.serverError(errorData.message)
                     }
 
                     // Try to decode as AuthResponse for authentication errors
                     if let authErrorData = try? self.decoder.decode(AuthResponse.self, from: data) {
-                        throw APIError(message: authErrorData.message, code: "\(httpResponse.statusCode)")
+                        throw APIError.serverError(authErrorData.message)
                     }
 
                     // Try to decode as a generic error response
                     if let errorResponse = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any],
                        let errorMessage = errorResponse["message"] as? String {
-                        throw APIError(message: errorMessage, code: "\(httpResponse.statusCode)")
+                        throw APIError.serverError( errorMessage)
                     }
 
                     // Fallback to status code specific messages
@@ -111,7 +111,7 @@ class APIService: ObservableObject {
                         fallbackMessage = "Something went wrong. Please try again."
                     }
 
-                    throw APIError(message: fallbackMessage, code: "\(httpResponse.statusCode)")
+                    throw APIError.serverError( fallbackMessage)
                 }
 
                 // Debug: Log raw response data
@@ -133,34 +133,34 @@ class APIService: ObservableObject {
                         print("❌ Missing key '\(key.stringValue)' for \(responseType)")
                         print("   Coding path: \(context.codingPath.map { $0.stringValue }.joined(separator: " -> "))")
                         print("   Context: \(context.debugDescription)")
-                        return APIError(message: "Missing required field: \(key.stringValue)")
+                        return APIError.serverError( "Missing required field: \(key.stringValue)")
 
                     case .typeMismatch(let type, let context):
                         print("❌ Type mismatch for \(type) in \(responseType)")
                         print("   Coding path: \(context.codingPath.map { $0.stringValue }.joined(separator: " -> "))")
                         print("   Context: \(context.debugDescription)")
-                        return APIError(message: "Data type mismatch for field: \(context.codingPath.last?.stringValue ?? "unknown")")
+                        return APIError.serverError( "Data type mismatch for field: \(context.codingPath.last?.stringValue ?? "unknown")")
 
                     case .valueNotFound(let type, let context):
                         print("❌ Value not found for \(type) in \(responseType)")
                         print("   Coding path: \(context.codingPath.map { $0.stringValue }.joined(separator: " -> "))")
                         print("   Context: \(context.debugDescription)")
-                        return APIError(message: "Missing value for field: \(context.codingPath.last?.stringValue ?? "unknown")")
+                        return APIError.serverError( "Missing value for field: \(context.codingPath.last?.stringValue ?? "unknown")")
 
                     case .dataCorrupted(let context):
                         print("❌ Data corrupted for \(responseType)")
                         print("   Coding path: \(context.codingPath.map { $0.stringValue }.joined(separator: " -> "))")
                         print("   Context: \(context.debugDescription)")
-                        return APIError(message: "Corrupted data for field: \(context.codingPath.last?.stringValue ?? "unknown")")
+                        return APIError.serverError( "Corrupted data for field: \(context.codingPath.last?.stringValue ?? "unknown")")
 
                     @unknown default:
                         print("❌ Unknown decoding error for \(responseType): \(decodingError)")
-                        return APIError(message: "Unknown parsing error")
+                        return APIError.serverError( "Unknown parsing error")
                     }
                 }
 
                 print("❌ General Error for \(responseType): \(error.localizedDescription)")
-                return APIError(message: error.localizedDescription)
+                return APIError.serverError( error.localizedDescription)
             }
             .eraseToAnyPublisher()
     }
@@ -169,7 +169,7 @@ class APIService: ObservableObject {
     func login(email: String, password: String) -> AnyPublisher<AuthResponse, APIError> {
         let loginRequest = LoginRequest(email: email, password: password)
         guard let body = try? encoder.encode(loginRequest) else {
-            return Fail(error: APIError(message: "Failed to encode login request"))
+            return Fail(error: APIError.serverError( "Failed to encode login request"))
                 .eraseToAnyPublisher()
         }
 
@@ -197,7 +197,7 @@ class APIService: ObservableObject {
         )
 
         guard let body = try? encoder.encode(registerRequest) else {
-            return Fail(error: APIError(message: "Failed to encode registration request"))
+            return Fail(error: APIError.serverError( "Failed to encode registration request"))
                 .eraseToAnyPublisher()
         }
 
@@ -262,7 +262,7 @@ class APIService: ObservableObject {
         components.queryItems = queryItems.isEmpty ? nil : queryItems
 
         guard let url = components.url else {
-            return Fail(error: APIError(message: "Invalid URL"))
+            return Fail(error: APIError.serverError( "Invalid URL"))
                 .eraseToAnyPublisher()
         }
 
@@ -279,7 +279,7 @@ class APIService: ObservableObject {
             .tryMap { data, response -> Data in
                 guard let httpResponse = response as? HTTPURLResponse,
                       200...299 ~= httpResponse.statusCode else {
-                    throw APIError(message: "Request failed")
+                    throw APIError.serverError( "Request failed")
                 }
                 return data
             }
@@ -288,7 +288,7 @@ class APIService: ObservableObject {
                 if let apiError = error as? APIError {
                     return apiError
                 }
-                return APIError(message: error.localizedDescription)
+                return APIError.serverError( error.localizedDescription)
             }
             .eraseToAnyPublisher()
     }
@@ -329,7 +329,7 @@ class APIService: ObservableObject {
         ]
 
         guard let body = try? JSONSerialization.data(withJSONObject: reviewData) else {
-            return Fail(error: APIError(message: "Failed to encode review data"))
+            return Fail(error: APIError.serverError( "Failed to encode review data"))
                 .eraseToAnyPublisher()
         }
 
@@ -353,7 +353,7 @@ class APIService: ObservableObject {
     func validateGiftCard(code: String) -> AnyPublisher<GiftCardValidationResponse, APIError> {
         let request = GiftCardValidationRequest(code: code)
         guard let body = try? encoder.encode(request) else {
-            return Fail(error: APIError(message: "Failed to encode gift card request"))
+            return Fail(error: APIError.serverError( "Failed to encode gift card request"))
                 .eraseToAnyPublisher()
         }
 
@@ -399,7 +399,7 @@ class APIService: ObservableObject {
         ]
 
         guard let url = components.url else {
-            return Fail(error: APIError(message: "Invalid URL for nearby branches"))
+            return Fail(error: APIError.serverError( "Invalid URL for nearby branches"))
                 .eraseToAnyPublisher()
         }
 
@@ -411,7 +411,7 @@ class APIService: ObservableObject {
             .tryMap { data, response -> Data in
                 guard let httpResponse = response as? HTTPURLResponse,
                       200...299 ~= httpResponse.statusCode else {
-                    throw APIError(message: "Request failed")
+                    throw APIError.serverError( "Request failed")
                 }
                 return data
             }
@@ -420,7 +420,7 @@ class APIService: ObservableObject {
                 if let apiError = error as? APIError {
                     return apiError
                 }
-                return APIError(message: error.localizedDescription)
+                return APIError.serverError( error.localizedDescription)
             }
             .eraseToAnyPublisher()
     }
@@ -428,7 +428,7 @@ class APIService: ObservableObject {
     // MARK: - Orders
     func createOrder(_ orderRequest: CreateOrderRequest) -> AnyPublisher<CreateOrderResponse, APIError> {
         guard let body = try? encoder.encode(orderRequest) else {
-            return Fail(error: APIError(message: "Failed to encode order request"))
+            return Fail(error: APIError.serverError( "Failed to encode order request"))
                 .eraseToAnyPublisher()
         }
 
@@ -442,7 +442,7 @@ class APIService: ObservableObject {
 
     func getOrders() -> AnyPublisher<OrdersResponse, APIError> {
         guard let url = URL(string: baseURL + "/orders") else {
-            return Fail(error: APIError(message: "Invalid URL"))
+            return Fail(error: APIError.serverError( "Invalid URL"))
                 .eraseToAnyPublisher()
         }
 
@@ -464,14 +464,14 @@ class APIService: ObservableObject {
                 }
 
                 guard let httpResponse = response as? HTTPURLResponse else {
-                    throw APIError(message: "Invalid response")
+                    throw APIError.serverError( "Invalid response")
                 }
 
                 guard 200...299 ~= httpResponse.statusCode else {
                     if let errorMessage = String(data: data, encoding: .utf8) {
                         print("❌ HTTP Error \(httpResponse.statusCode): \(errorMessage)")
                     }
-                    throw APIError(message: "HTTP \(httpResponse.statusCode)")
+                    throw APIError.serverError( "HTTP \(httpResponse.statusCode)")
                 }
 
                 return data
@@ -481,7 +481,7 @@ class APIService: ObservableObject {
                 if let decodingError = error as? DecodingError {
                     print("❌ Decoding error for Orders: \(decodingError)")
                 }
-                return APIError(message: error.localizedDescription)
+                return APIError.serverError( error.localizedDescription)
             }
             .eraseToAnyPublisher()
     }
@@ -549,6 +549,214 @@ class APIService: ObservableObject {
                 }, receiveValue: { response in
                     continuation.resume(returning: response)
                 })
+        }
+    }
+
+    // MARK: - Installment Order Methods
+
+    func createInstallmentOrderAsync(_ orderRequest: CreateInstallmentOrderRequest, deliveryMethod: DeliveryMethod = .storePickup, shippingAddress: ShippingAddressRequest? = nil, userId: String? = nil) async throws -> InstallmentOrderResponse {
+        print("🚀 [DEBUG] Creating installment order with request: \(orderRequest)")
+
+        // Transform iOS request to match backend /orders endpoint format
+        let clientRef = "iOS-\(Date().timeIntervalSince1970)-\(Int.random(in: 1000...9999))"
+
+        let customerDict: [String: Any] = [
+            "name": orderRequest.customer.name,
+            "email": orderRequest.customer.email,
+            "phone": orderRequest.customer.phone ?? ""
+        ]
+
+        // Create a single item from the installment request
+        let itemDict: [String: Any] = [
+            "productId": orderRequest.productId,
+            "title": orderRequest.productName,
+            "vendorId": orderRequest.sellerId,
+            "quantity": orderRequest.quantity,
+            "unitPriceCents": Int(orderRequest.unitPrice * 100),
+            "sku": orderRequest.productSku,
+            "customizations": []
+        ]
+
+        let totalCents = Int(orderRequest.totalPrice * 100)
+
+        // Create installment plan from request
+        let installmentPlanDict: [String: Any] = [
+            "productId": orderRequest.productId,
+            "planId": orderRequest.planId,
+            "planName": orderRequest.planName,
+            "duration": 12, // Default duration - adjust as needed
+            "downPaymentAmount": Int(orderRequest.downPaymentAmount * 100),
+            "monthlyPaymentAmount": Int(orderRequest.monthlyAmount * 100),
+            "totalAmount": Int(orderRequest.totalAmount * 100)
+        ]
+
+        // Convert delivery method to backend format
+        let backendDeliveryMethod = deliveryMethod == .homeDelivery ? "delivery" : "pickup"
+
+        // Create uploaded documents structure with minimum required (1 document)
+        let uploadedDocuments: [String: [[String: Any]]] = [
+            orderRequest.sellerId: [
+                [
+                    "name": "national_id.pdf",
+                    "type": "application/pdf",
+                    "size": 1024000,
+                    "data": "data:application/pdf;base64,simulated-document-data"
+                ]
+            ]
+        ]
+
+        var orderData: [String: Any] = [
+            "clientOrderRef": clientRef,
+            "userId": userId ?? "guest_user", // Use authenticated user ID
+            "customer": customerDict,
+            "deliveryMethod": backendDeliveryMethod,
+            "items": [itemDict],
+            "shippingCents": 0,
+            "taxCents": 0,
+            "totalCents": totalCents,
+            "paymentMethod": "installment",
+            "isInstallmentOrder": true,
+            "installmentPlans": [installmentPlanDict],
+            "uploadedDocuments": uploadedDocuments
+        ]
+
+        // Add shipping address if provided (for home delivery)
+        if let shippingAddress = shippingAddress {
+            orderData["shippingAddress"] = [
+                "country": shippingAddress.country,
+                "city": shippingAddress.city,
+                "street": shippingAddress.street,
+                "postcode": shippingAddress.postcode ?? "",
+                "notes": shippingAddress.notes ?? ""
+            ]
+        }
+
+        print("📤 [DEBUG] Sending transformed order data to /orders endpoint")
+        print("📋 [DEBUG] Order data: \(orderData)")
+
+        let body = try JSONSerialization.data(withJSONObject: orderData)
+
+        // Call /orders endpoint instead of /installment-orders
+        let orderResponse = try await performRequestAsync(
+            endpoint: "/orders",
+            method: .POST,
+            body: body,
+            responseType: OrderResponse.self
+        )
+
+        print("✅ [DEBUG] Order creation response: \(orderResponse)")
+
+        // Transform OrderResponse to InstallmentOrderResponse
+        // Use the orderId from the response as the installment order ID
+        let installmentOrderId = orderResponse.orderId ?? orderResponse.order?.id ?? "inst_\(UUID().uuidString.prefix(8))"
+
+        let installmentResponse = InstallmentOrderResponse(
+            success: orderResponse.success,
+            message: orderResponse.message,
+            installmentOrderId: installmentOrderId,
+            orderNumber: orderResponse.order?.orderNumber,
+            order: orderResponse.order
+        )
+
+        print("🔄 [DEBUG] Transformed to installment response: \(installmentResponse)")
+
+        return installmentResponse
+    }
+
+    func uploadDocumentsAsync(_ uploadRequest: DocumentUploadRequest) async throws -> DocumentUploadResponse {
+        // Create multipart form data
+        let boundary = UUID().uuidString
+        var body = Data()
+
+        // Add installment order ID
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"installmentOrderId\"\r\n\r\n".data(using: .utf8)!)
+        body.append("\(uploadRequest.installmentOrderId)\r\n".data(using: .utf8)!)
+
+        // Add each document
+        for (index, document) in uploadRequest.documents.enumerated() {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"documents\"; filename=\"\(document.fileName)\"\r\n".data(using: .utf8)!)
+            body.append("Content-Type: \(document.mimeType)\r\n\r\n".data(using: .utf8)!)
+            body.append(document.file)
+            body.append("\r\n".data(using: .utf8)!)
+
+            // Add document type
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"documentTypes[\(index)]\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(document.documentType)\r\n".data(using: .utf8)!)
+        }
+
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+
+        return try await performRequestAsync(
+            endpoint: "/installment-orders/upload-documents",
+            method: .POST,
+            body: body,
+            responseType: DocumentUploadResponse.self,
+            additionalHeaders: ["Content-Type": "multipart/form-data; boundary=\(boundary)"]
+        )
+    }
+
+    // MARK: - Private Helper for Async Requests with Headers
+
+    private func performRequestAsync<T: Codable>(
+        endpoint: String,
+        method: HTTPMethod = .GET,
+        body: Data? = nil,
+        responseType: T.Type,
+        additionalHeaders: [String: String] = [:]
+    ) async throws -> T {
+        guard let url = URL(string: baseURL + endpoint) else {
+            throw URLError(.badURL)
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = method.rawValue
+        request.httpBody = body
+
+        // Set default headers
+        if method != .GET {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        // Add additional headers (will override defaults if same key)
+        for (key, value) in additionalHeaders {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+
+        // Add authentication if available
+        if let token = UserDefaults.standard.string(forKey: "auth_token") {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (data, response) = try await session.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+
+        guard 200...299 ~= httpResponse.statusCode else {
+            if let errorData = try? decoder.decode(ErrorResponse.self, from: data) {
+                throw APIError.serverError(errorData.message)
+            }
+            throw URLError(.badServerResponse)
+        }
+
+        // Add debug logging for response data
+        if let responseString = String(data: data, encoding: .utf8) {
+            print("📥 [DEBUG] Raw response data: \(responseString)")
+        }
+
+        do {
+            return try decoder.decode(T.self, from: data)
+        } catch {
+            print("❌ [DEBUG] JSON decoding error: \(error)")
+            if let decodingError = error as? DecodingError {
+                print("❌ [DEBUG] Detailed decoding error: \(decodingError)")
+            }
+            throw error
         }
     }
 }

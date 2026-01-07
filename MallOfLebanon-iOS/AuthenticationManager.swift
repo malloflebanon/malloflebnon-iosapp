@@ -37,7 +37,7 @@ class AuthenticationManager: ObservableObject {
                 receiveCompletion: { [weak self] completion in
                     self?.isLoading = false
                     if case .failure(let error) = completion {
-                        self?.errorMessage = error.message
+                        self?.errorMessage = error.localizedDescription
                     }
                 },
                 receiveValue: { [weak self] response in
@@ -80,7 +80,7 @@ class AuthenticationManager: ObservableObject {
             receiveCompletion: { [weak self] completion in
                 self?.isLoading = false
                 if case .failure(let error) = completion {
-                    self?.errorMessage = error.message
+                    self?.errorMessage = error.localizedDescription
                 }
             },
             receiveValue: { [weak self] response in

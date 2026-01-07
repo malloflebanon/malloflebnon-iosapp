@@ -4,12 +4,21 @@ import SwiftUI
 struct CheckoutProgressIndicator: View {
     let currentStep: CheckoutStep
     let progressPercentage: Double
+    let isInstallmentOrder: Bool
+
+    private var visibleSteps: [CheckoutStep] {
+        if isInstallmentOrder {
+            return CheckoutStep.allCases
+        } else {
+            return CheckoutStep.allCases.filter { $0 != .documents }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 12) {
             // Progress Bar
             HStack {
-                ForEach(CheckoutStep.allCases, id: \.self) { step in
+                ForEach(visibleSteps, id: \.self) { step in
                     HStack {
                         // Step Circle
                         ZStack {
@@ -22,14 +31,14 @@ struct CheckoutProgressIndicator: View {
                                     .font(.caption)
                                                     .foregroundColor(.white)
                             } else {
-                                Text("\(step.rawValue + 1)")
+                                Text("\((visibleSteps.firstIndex(of: step) ?? 0) + 1)")
                                     .font(.caption)
                                                     .foregroundColor(step == currentStep ? .white : .secondary)
                             }
                         }
 
                         // Connecting Line
-                        if step != CheckoutStep.allCases.last {
+                        if step != visibleSteps.last {
                             Rectangle()
                                 .fill(step.rawValue < currentStep.rawValue ? Color.blue : Color.gray.opacity(0.3))
                                 .frame(height: 2)
@@ -40,7 +49,7 @@ struct CheckoutProgressIndicator: View {
 
             // Step Labels
             HStack {
-                ForEach(CheckoutStep.allCases, id: \.self) { step in
+                ForEach(visibleSteps, id: \.self) { step in
                     VStack(spacing: 4) {
                         Image(systemName: step.icon)
                             .font(.caption)
@@ -366,6 +375,74 @@ struct DeliveryMethodCard: View {
     }
 }
 
+// MARK: - Documents Step
+struct DocumentsStepView: View {
+    @ObservedObject var viewModel: CheckoutViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Required Documents")
+                .font(.title2)
+
+            Text("Upload at least one document to proceed. Additional documents improve approval chances.")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+
+            // Document Upload Information
+            VStack(spacing: 16) {
+                Text("Document Upload Required")
+                    .font(.headline)
+                    .padding()
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Please prepare the following documents:")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Image(systemName: "doc.text")
+                                .foregroundColor(.blue)
+                            Text("National ID or Passport")
+                        }
+
+                        HStack {
+                            Image(systemName: "doc.text")
+                                .foregroundColor(.blue)
+                            Text("Salary Certificate (last 3 months)")
+                        }
+
+                        HStack {
+                            Image(systemName: "doc.text")
+                                .foregroundColor(.blue)
+                            Text("Bank Statement (last 3 months)")
+                        }
+                    }
+                    .font(.subheadline)
+                    .padding(.leading)
+                }
+                .padding()
+                .background(Color.blue.opacity(0.1))
+                .cornerRadius(12)
+
+                if viewModel.checkoutState.uploadedDocumentsCount >= viewModel.checkoutState.requiredDocumentsCount {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                        Text("All required documents have been uploaded!")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.green)
+                    }
+                    .padding()
+                    .background(Color.green.opacity(0.1))
+                    .cornerRadius(8)
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Payment Step
 struct PaymentStepView: View {
     @ObservedObject var viewModel: CheckoutViewModel
@@ -631,9 +708,21 @@ struct CheckoutNavigationButtons: View {
 
             // Next/Place Order Button
             Button(action: {
-                if viewModel.isLastStep {
+                if viewModel.checkoutState.currentStep == .documents {
+                    if viewModel.checkoutState.uploadedDocumentsCount >= viewModel.checkoutState.requiredDocumentsCount {
+                        // Documents already uploaded, proceed to payment
+                        print("➡️ [DEBUG] Documents uploaded, continuing to payment - current step: \(viewModel.checkoutState.currentStep)")
+                        viewModel.goToNextStep()
+                    } else {
+                        // Need to upload documents
+                        print("📄 [DEBUG] Upload Documents button pressed - current step: \(viewModel.checkoutState.currentStep)")
+                        viewModel.uploadDocuments()
+                    }
+                } else if viewModel.isLastStep {
+                    print("🛒 [DEBUG] Place Order button pressed - current step: \(viewModel.checkoutState.currentStep)")
                     viewModel.placeOrder()
                 } else {
+                    print("➡️ [DEBUG] Continue button pressed - current step: \(viewModel.checkoutState.currentStep)")
                     viewModel.goToNextStep()
                 }
             }) {
@@ -643,7 +732,7 @@ struct CheckoutNavigationButtons: View {
                             .scaleEffect(0.8)
                             .foregroundColor(.white)
                     } else {
-                        Text(viewModel.isLastStep ? "Place Order" : "Continue")
+                        Text(buttonText)
                             }
                 }
                 .foregroundColor(.white)
@@ -656,12 +745,30 @@ struct CheckoutNavigationButtons: View {
         }
     }
 
+    private var buttonText: String {
+        switch viewModel.checkoutState.currentStep {
+        case .documents:
+            if viewModel.checkoutState.uploadedDocumentsCount >= viewModel.checkoutState.requiredDocumentsCount {
+                return "Continue"
+            } else {
+                return viewModel.checkoutState.isInstallmentOrder ? "Upload Documents" : "Create Installment Order"
+            }
+        case .payment:
+            return "Place Order"
+        default:
+            return "Continue"
+        }
+    }
+
     private var canProceed: Bool {
         switch viewModel.checkoutState.currentStep {
         case .customerInfo:
             return viewModel.canProceedFromCustomerInfo
         case .delivery:
             return viewModel.canProceedFromDelivery
+        case .documents:
+            // Always allow the Upload Documents button to be enabled
+            return true
         case .payment:
             return viewModel.canPlaceOrderFromPayment
         }

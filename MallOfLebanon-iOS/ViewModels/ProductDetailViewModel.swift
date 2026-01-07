@@ -17,7 +17,14 @@ class ProductDetailViewModel: ObservableObject {
     @Published var activeTab: DetailTab = .specifications
     @Published var currentImages: [String] = []
 
+    // MARK: - Installment Properties
+    @Published var selectedInstallmentPlan: InstallmentPlanSelection?
+    @Published var showInstallmentPlans = false
+    @Published var showCartConflictModal = false
+    @Published var cartConflictInfo: CartConflictInfo?
+
     private let apiService = APIService.shared
+    private let cartManager = CartManager.shared
 
     enum DetailTab: CaseIterable {
         case specifications
@@ -363,6 +370,134 @@ class ProductDetailViewModel: ObservableObject {
         if quantity > 1 {
             quantity -= 1
         }
+    }
+
+    // MARK: - Installment Methods
+    var hasInstallmentPlans: Bool {
+        guard let product = product else { return false }
+        return product.hasInstallments && calculatedPrice >= 200.0 // Minimum amount for installments
+    }
+
+    func addToCartWithInstallment() {
+        guard let product = product else { return }
+
+        // Check for cart conflicts
+        let conflictInfo = cartManager.checkCartConflict(hasInstallmentPlan: selectedInstallmentPlan != nil)
+
+        if conflictInfo.hasConflict {
+            cartConflictInfo = conflictInfo
+            showCartConflictModal = true
+            return
+        }
+
+        // Create customizations array
+        let customizations = createCustomizationSelections()
+
+        // Add to cart
+        cartManager.addProductWithInstallment(
+            product,
+            quantity: quantity,
+            customizations: customizations,
+            installmentPlan: selectedInstallmentPlan
+        )
+
+        NSLog("🛒 Added product with installment plan: \(selectedInstallmentPlan?.planName ?? "none")")
+    }
+
+    func buyNowWithInstallment() {
+        guard let product = product else { return }
+
+        // Check for cart conflicts
+        let conflictInfo = cartManager.checkCartConflict(hasInstallmentPlan: selectedInstallmentPlan != nil)
+
+        if conflictInfo.hasConflict {
+            cartConflictInfo = conflictInfo
+            showCartConflictModal = true
+            return
+        }
+
+        // For buy now, we need to clear cart first and then add the item
+        cartManager.clearCart()
+
+        // Create customizations array
+        let customizations = createCustomizationSelections()
+
+        // Add to cart
+        cartManager.addProductWithInstallment(
+            product,
+            quantity: quantity,
+            customizations: customizations,
+            installmentPlan: selectedInstallmentPlan
+        )
+
+        // TODO: Navigate to checkout page
+        NSLog("🚀 Buy now with installment plan: \(selectedInstallmentPlan?.planName ?? "none")")
+    }
+
+    private func createCustomizationSelections() -> [CustomizationSelection]? {
+        guard let product = product else { return nil }
+
+        var customizations: [CustomizationSelection] = []
+
+        for customization in product.customizationOptions ?? [] {
+            switch customization.type {
+            case "single":
+                if let selectedOptionId = selectedCustomizations[customization.id] as? String,
+                   let option = customization.options.first(where: { $0.id == selectedOptionId }) {
+                    customizations.append(CustomizationSelection(
+                        customizationId: customization.id,
+                        customizationName: customization.name,
+                        optionId: option.id,
+                        optionLabel: option.value,
+                        optionValue: option.value,
+                        priceModifier: option.priceModifier
+                    ))
+                }
+
+            case "multiple":
+                if let selectedOptionIds = selectedCustomizations[customization.id] as? [String] {
+                    for optionId in selectedOptionIds {
+                        if let option = customization.options.first(where: { $0.id == optionId }) {
+                            customizations.append(CustomizationSelection(
+                                customizationId: customization.id,
+                                customizationName: customization.name,
+                                optionId: option.id,
+                                optionLabel: option.value,
+                                optionValue: option.value,
+                                priceModifier: option.priceModifier
+                            ))
+                        }
+                    }
+                }
+
+            default:
+                break
+            }
+        }
+
+        return customizations.isEmpty ? nil : customizations
+    }
+
+    func handleCartConflictAction(_ action: CartConflictAction) {
+        switch action {
+        case .clearCartAndAdd:
+            cartManager.clearCart()
+            addToCartWithInstallment()
+
+        case .clearCartAndBuyNow:
+            cartManager.clearCart()
+            buyNowWithInstallment()
+
+        case .continueToCheckout:
+            // TODO: Navigate to checkout
+            NSLog("🛒 Navigate to checkout")
+
+        case .cancel:
+            break
+        }
+
+        showCartConflictModal = false
+        cartConflictInfo = nil
     }
 
     // MARK: - Debug Test Methods

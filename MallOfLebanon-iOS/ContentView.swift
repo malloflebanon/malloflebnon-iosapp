@@ -311,8 +311,8 @@ struct HomeView: View {
     @State private var showingFilters = false
 
     private let columns = [
-        GridItem(.flexible(), spacing: 8),
-        GridItem(.flexible(), spacing: 8)
+        GridItem(.flexible(), spacing: 16),
+        GridItem(.flexible(), spacing: 16)
     ]
 
     var body: some View {
@@ -343,9 +343,10 @@ struct HomeView: View {
                     // Products Grid
                     productsSection
 
-                    // Load More Button
-                    if viewModel.hasMorePages && !viewModel.products.isEmpty {
-                        loadMoreButton
+                    // Loading indicator at bottom for infinite scroll
+                    if viewModel.isLoading && viewModel.hasMorePages && !viewModel.products.isEmpty {
+                        ProgressView("Loading more products...")
+                            .frame(maxWidth: .infinity, minHeight: 50)
                     }
                 }
                 .padding(.horizontal)
@@ -718,19 +719,21 @@ struct HomeView: View {
             } else if viewModel.products.isEmpty {
                 emptyStateView
             } else {
-                LazyVGrid(columns: columns, spacing: 20) {
-                    ForEach(viewModel.products, id: \.id) { product in
-                        ProductCardWithNavigation(
-                            product: product,
-                            productId: product.id,
-                            onAddToCart: {
-                                addToCart(product)
-                            }
-                        )
-                        .environmentObject(cartManager)
-                        .buttonStyle(PlainButtonStyle())
-                        .onAppear {
-                            print("🎯 ProductCard displayed - ID: \(product.id), Name: \(product.name)")
+                StaggeredProductGrid(products: viewModel.products) { product in
+                    ProductCardWithNavigation(
+                        product: product,
+                        productId: product.id,
+                        onAddToCart: {
+                            addToCart(product)
+                        }
+                    )
+                    .environmentObject(cartManager)
+                    .buttonStyle(PlainButtonStyle())
+                    .onAppear {
+                        print("🎯 ProductCard displayed - ID: \(product.id), Name: \(product.name)")
+                        // Load more when approaching the end
+                        if isLastItem(product) && viewModel.hasMorePages && !viewModel.isLoading {
+                            viewModel.loadMoreProducts()
                         }
                     }
                 }
@@ -761,24 +764,6 @@ struct HomeView: View {
         .frame(maxWidth: .infinity, minHeight: 200)
     }
 
-    private var loadMoreButton: some View {
-        Button(action: {
-            viewModel.loadMoreProducts()
-        }) {
-            HStack {
-                if viewModel.isLoading {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                } else {
-                    Image(systemName: "arrow.down.circle")
-                }
-                Text("Load More")
-            }
-            .foregroundColor(.blue)
-            .padding()
-        }
-        .disabled(viewModel.isLoading)
-    }
 
     private var filterButton: some View {
         Button(action: {
@@ -905,6 +890,11 @@ struct HomeView: View {
 
     private func addToCart(_ product: Product) {
         cartManager.addProduct(product)
+    }
+
+    private func isLastItem(_ product: Product) -> Bool {
+        guard let lastProduct = viewModel.products.last else { return false }
+        return product.id == lastProduct.id
     }
 }
 
@@ -1035,6 +1025,42 @@ struct SimpleCategoryCard: View {
         .frame(maxWidth: .infinity)
         .background(Color.blue.opacity(0.1))
         .cornerRadius(12)
+    }
+}
+
+// MARK: - Staggered Product Grid
+struct StaggeredProductGrid<Content: View>: View {
+    let products: [Product]
+    let content: (Product) -> Content
+
+    private let columnSpacing: CGFloat = 16
+    private let verticalSpacing: CGFloat = 20
+
+    var body: some View {
+        HStack(alignment: .top, spacing: columnSpacing) {
+            // First Column - Starts immediately
+            LazyVStack(spacing: verticalSpacing) {
+                ForEach(Array(products.enumerated()), id: \.offset) { index, product in
+                    if index % 2 == 0 {
+                        content(product)
+                            .padding(.horizontal, 4)
+                    }
+                }
+            }
+
+            // Second Column - Starts with offset (staggered)
+            LazyVStack(spacing: verticalSpacing) {
+                // Add spacer to create staggered effect
+                Spacer(minLength: 3)
+
+                ForEach(Array(products.enumerated()), id: \.offset) { index, product in
+                    if index % 2 == 1 {
+                        content(product)
+                            .padding(.horizontal, 4)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1234,9 +1260,10 @@ struct CategoryProductsScreen: View {
                     productsGrid
                 }
 
-                // Load More Button
-                if viewModel.hasMorePages && !viewModel.products.isEmpty {
-                    loadMoreButton
+                // Loading indicator at bottom for infinite scroll
+                if viewModel.isLoading && viewModel.hasMorePages && !viewModel.products.isEmpty {
+                    ProgressView("Loading more products...")
+                        .frame(maxWidth: .infinity, minHeight: 50)
                 }
             }
             .padding(.horizontal)
@@ -1318,41 +1345,23 @@ struct CategoryProductsScreen: View {
     }
 
     private var productsGrid: some View {
-        LazyVGrid(columns: columns, spacing: 20) {
-            ForEach(viewModel.products, id: \.id) { product in
-                NavigationLink(destination: ProductDetailView(productId: product.id).environmentObject(cartManager)) {
-                    ProductCard(product: product) {
-                        addToCart(product)
-                    }
+        StaggeredProductGrid(products: viewModel.products) { product in
+            NavigationLink(destination: ProductDetailView(productId: product.id).environmentObject(cartManager)) {
+                ProductCard(product: product) {
+                    addToCart(product)
                 }
-                .buttonStyle(PlainButtonStyle())
-                .onAppear {
-                    print("🎯 CategoryProducts ProductCard displayed - ID: \(product.id), Name: \(product.name)")
+            }
+            .buttonStyle(PlainButtonStyle())
+            .onAppear {
+                print("🎯 CategoryProducts ProductCard displayed - ID: \(product.id), Name: \(product.name)")
+                // Load more when approaching the end
+                if isLastItem(product) && viewModel.hasMorePages && !viewModel.isLoading {
+                    viewModel.loadMoreProducts()
                 }
             }
         }
     }
 
-    private var loadMoreButton: some View {
-        Button(action: {
-            viewModel.loadMoreProducts()
-        }) {
-            HStack {
-                if viewModel.isLoading {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                        .padding(.trailing, 8)
-                }
-                Text(viewModel.isLoading ? "Loading..." : "Load More")
-            }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(Color.blue)
-            .foregroundColor(.white)
-            .cornerRadius(10)
-        }
-        .disabled(viewModel.isLoading)
-    }
 
     private func setupCategoryFilter() {
         print("🎯 CategoryProductsScreen setup for: \(category.name) (ID: \(category.id))")
@@ -1366,6 +1375,11 @@ struct CategoryProductsScreen: View {
         cartManager.addProduct(product, quantity: 1)
         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
         impactFeedback.impactOccurred()
+    }
+
+    private func isLastItem(_ product: Product) -> Bool {
+        guard let lastProduct = viewModel.products.last else { return false }
+        return product.id == lastProduct.id
     }
 }
 

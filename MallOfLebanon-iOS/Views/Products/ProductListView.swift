@@ -22,9 +22,10 @@ struct ProductListView: View {
                     // Products Grid
                     productsSection
 
-                    // Load More Button
-                    if viewModel.hasMorePages && !viewModel.products.isEmpty {
-                        loadMoreButton
+                    // Loading indicator at bottom for infinite scroll
+                    if viewModel.isLoading && viewModel.hasMorePages && !viewModel.products.isEmpty {
+                        ProgressView("Loading more products...")
+                            .frame(maxWidth: .infinity, minHeight: 50)
                     }
                 }
                 .padding(.horizontal)
@@ -87,17 +88,21 @@ struct ProductListView: View {
             } else if viewModel.products.isEmpty {
                 emptyStateView
             } else {
-                LazyVGrid(columns: columns, spacing: 16) {
-                    ForEach(viewModel.products, id: \.id) { product in
-                        ProductCardWithNavigation(
-                            product: product,
-                            productId: product.id,
-                            onAddToCart: {
-                                addToCart(product)
-                            }
-                        )
-                        .environmentObject(cartManager)
-                        .id(product.id) // Stable identifier for SwiftUI optimization
+                StaggeredProductGrid(products: viewModel.products) { product in
+                    ProductCardWithNavigation(
+                        product: product,
+                        productId: product.id,
+                        onAddToCart: {
+                            addToCart(product)
+                        }
+                    )
+                    .environmentObject(cartManager)
+                    .id(product.id)
+                    .onAppear {
+                        // Load more when approaching the end
+                        if isLastItem(product) && viewModel.hasMorePages && !viewModel.isLoading {
+                            viewModel.loadMoreProducts()
+                        }
                     }
                 }
             }
@@ -127,24 +132,6 @@ struct ProductListView: View {
         .frame(maxWidth: .infinity, minHeight: 200)
     }
 
-    private var loadMoreButton: some View {
-        Button(action: {
-            viewModel.loadMoreProducts()
-        }) {
-            HStack {
-                if viewModel.isLoading {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                } else {
-                    Image(systemName: "arrow.down.circle")
-                }
-                Text("Load More")
-            }
-            .foregroundColor(.blue)
-            .padding()
-        }
-        .disabled(viewModel.isLoading)
-    }
 
     private var filterButton: some View {
         Button(action: {
@@ -272,6 +259,11 @@ struct ProductListView: View {
     private func addToCart(_ product: Product) {
         cartManager.addProduct(product)
     }
+
+    private func isLastItem(_ product: Product) -> Bool {
+        guard let lastProduct = viewModel.products.last else { return false }
+        return product.id == lastProduct.id
+    }
 }
 
 
@@ -348,6 +340,7 @@ struct ProductCardWithNavigation: View {
                 }
             }
         }
+        .padding(8)
         .background(Color(.systemBackground))
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)

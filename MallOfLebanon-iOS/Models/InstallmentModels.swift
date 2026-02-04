@@ -30,12 +30,12 @@ struct InstallmentPlan: Codable, Identifiable, Equatable {
         let downPaymentAmount = (totalPrice * downPaymentPercentage) / 100
         let remainingAmount = totalPrice - downPaymentAmount
 
-        // Calculate processing fee
+        // Calculate processing fee - match frontend logic
         var totalProcessingFee = processingFee
         if let fixedFee = processingFeeFixed {
             totalProcessingFee += fixedFee
         }
-        if let percentageFee = processingFeePercentage {
+        if let percentageFee = processingFeePercentage, percentageFee > 0 {
             totalProcessingFee += (totalPrice * percentageFee) / 100
         }
 
@@ -336,10 +336,13 @@ struct SimpleInstallmentPlan: Identifiable {
         let downPayment = (orderAmount * downPaymentPercentage) / 100
         let remainingAmount = orderAmount - downPayment
 
-        // Calculate processing fee - use fixed fee if available, otherwise percentage
-        var processingFee = orderAmount * (processingFeePercentage / 100)
+        // Calculate processing fee - match frontend logic
+        var processingFee: Double = 0
         if let fixedFee = processingFeeFixed {
             processingFee += fixedFee
+        }
+        if processingFeePercentage > 0 {
+            processingFee += (orderAmount * processingFeePercentage) / 100
         }
 
         // Calculate interest using frontend logic: annual rate / 12 months * duration

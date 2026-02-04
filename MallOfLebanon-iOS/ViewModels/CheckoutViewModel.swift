@@ -68,6 +68,13 @@ class CheckoutViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
+        // Update order summary when shipping cost changes
+        cartManager.$shippingCost
+            .sink { [weak self] _ in
+                self?.updateOrderSummary()
+            }
+            .store(in: &cancellables)
+
         // Update customer info when form fields change
         Publishers.CombineLatest4($firstName, $lastName, $email, $phone)
             .sink { [weak self] firstName, lastName, email, phone in
@@ -90,7 +97,8 @@ class CheckoutViewModel: ObservableObject {
         orderSummary = OrderSummary(
             items: cartManager.items,
             deliveryMethod: checkoutState.deliveryMethod,
-            giftCardDiscount: giftCardDiscount
+            giftCardDiscount: giftCardDiscount,
+            dynamicShippingCost: cartManager.shippingCost
         )
     }
 
@@ -374,54 +382,142 @@ class CheckoutViewModel: ObservableObject {
     // MARK: - Order Placement
 
     func placeOrder() {
-        print("🛒 [DEBUG] placeOrder() called - current step: \(checkoutState.currentStep), canPlaceOrder: \(checkoutState.canPlaceOrder)")
+        print("\n🚀 ===== PLACE ORDER BUTTON CLICKED =====")
+        print("📊 Checkout State:")
+        print("   - Current Step: \(checkoutState.currentStep)")
+        print("   - Can Place Order: \(checkoutState.canPlaceOrder)")
+        print("   - Delivery Method: \(checkoutState.deliveryMethod)")
+        print("   - Payment Method: \(checkoutState.paymentMethod)")
+        print("   - Is Processing: \(checkoutState.isProcessing)")
+        print("   - Is Installment Order: \(checkoutState.isInstallmentOrder)")
+
+        print("🛒 Cart Information:")
+        print("   - Total Items: \(cartManager.itemCount)")
+        print("   - Cart Total: $\(cartManager.total)")
+        print("   - Subtotal: $\(cartManager.subtotal)")
+
+        // Log all cart items with their product IDs
+        print("🛒 Cart Items for Order:")
+        for (index, item) in cartManager.items.enumerated() {
+            print("   Item \(index + 1):")
+            print("     - Product ID: \(item.productId)")
+            print("     - Name: \(item.name)")
+            print("     - Price: $\(item.price)")
+            print("     - Quantity: \(item.quantity)")
+            print("     - Total: $\(item.total)")
+            print("     - Seller ID: \(item.sellerId)")
+            print("     - Is Raffle Ticket: \(item.isRaffleTicket)")
+            if item.isRaffleTicket, let raffleInfo = item.raffleInfo {
+                print("     - Raffle ID: \(raffleInfo.raffleId)")
+                print("     - Raffle Title: \(raffleInfo.raffleTitle ?? "nil")")
+            }
+        }
 
         guard checkoutState.canPlaceOrder else {
-            print("⚠️ [DEBUG] Cannot place order - requirements not met")
+            print("❌ CANNOT PLACE ORDER - Requirements not met")
+            print("   - Check all required fields are filled")
+            print("   - Check delivery/payment method selected")
             return
         }
 
+        print("✅ Order validation passed, proceeding to async order placement...")
         Task {
             await placeOrderAsync()
         }
+        print("🚀 ===== PLACE ORDER INITIATED =====\n")
     }
 
     private func placeOrderAsync() async {
+        print("\n🔄 ===== ASYNC ORDER PLACEMENT STARTED =====")
         checkoutState.isProcessing = true
         checkoutState.errorMessage = nil
+        print("📝 Processing state set to true, error message cleared")
 
         do {
             if checkoutState.isInstallmentOrder {
-                // For installment orders, use the installment order API
-                print("🚀 [DEBUG] Creating installment order at final submit...")
+                print("💳 Processing INSTALLMENT ORDER...")
                 let success = await createInstallmentOrder()
+                print("💳 Installment order result: \(success)")
 
                 await MainActor.run {
                     checkoutState.isProcessing = false
                     if success {
+                        print("✅ Installment order successful - showing success screen")
                         showingOrderSuccess = true
                         orderEmailSent = true
                         showEmailConfirmation = true
                         cartManager.clearCart()
                         resetCheckoutState()
+                    } else {
+                        print("❌ Installment order failed")
                     }
                 }
             } else {
-                // For regular orders, use the regular order API
+                print("🛒 Processing REGULAR ORDER...")
+
+                // Ensure shipping is calculated before creating order request
+                if checkoutState.deliveryMethod == .homeDelivery {
+                    print("📦 Calculating shipping for delivery...")
+                    await cartManager.calculateShipping()
+                    print("📦 Shipping calculated: $\(cartManager.shippingCost)")
+                }
+
+                // Create order request and log it
                 let orderRequest = createOrderRequest()
+                print("📦 Order Request Created:")
+                print("   - Customer Email: \(orderRequest.customer.email)")
+                print("   - Customer Name: \(orderRequest.customer.name)")
+                print("   - Delivery Method: \(orderRequest.deliveryMethod)")
+                print("   - Payment Method: \(orderRequest.paymentMethod)")
+                print("   - Items Count: \(orderRequest.items.count)")
+                print("   - Total Amount: $\(Double(orderRequest.totalCents) / 100.0)")
+                print("   - Shipping: $\(Double(orderRequest.shippingCents) / 100.0)")
+                print("   - Tax: $\(Double(orderRequest.taxCents) / 100.0)")
+                print("   - Client Order Ref: \(orderRequest.clientOrderRef)")
+
+                // Log each item in the order request
+                print("📦 Order Request Items:")
+                for (index, item) in orderRequest.items.enumerated() {
+                    print("   Item \(index + 1):")
+                    print("     - Product ID: \(item.productId)")
+                    print("     - Title: \(item.title)")
+                    print("     - SKU: \(item.sku)")
+                    print("     - Vendor ID: \(item.vendorId)")
+                    print("     - Unit Price: $\(Double(item.unitPriceCents) / 100.0)")
+                    print("     - Quantity: \(item.quantity)")
+                    print("     - Total: $\(Double(item.unitPriceCents * item.quantity) / 100.0)")
+                    if !item.customizations.isEmpty {
+                        print("     - Customizations: \(item.customizations.count)")
+                    }
+                }
+
+                print("🌐 Sending order request to API...")
                 let response = try await apiService.createOrderAsync(orderRequest)
+                print("📨 API Response received")
 
                 await MainActor.run {
                     checkoutState.isProcessing = false
+                    print("📝 Processing state set to false")
 
-                    // Debug logging
-                    print("🚚 [DEBUG] Order response received:")
-                    print("🚚 [DEBUG] Success: \(response.success)")
-                    print("🚚 [DEBUG] Message: \(response.message)")
-                    print("🚚 [DEBUG] Order: \(response.order != nil ? "Present" : "nil")")
-                    print("🚚 [DEBUG] Order Number: \(response.orderNumber ?? "nil")")
+                    // Enhanced debug logging
+                    print("\n📋 ===== ORDER RESPONSE DETAILS =====")
+                    print("✅ Success: \(response.success)")
+                    print("💬 Message: \(response.message)")
+                    print("📦 Order Present: \(response.order != nil ? "YES" : "NO")")
+                    print("🆔 Order Number: \(response.orderNumber ?? "nil")")
+
+                    if let order = response.order {
+                        print("📄 Order Details:")
+                        print("   - ID: \(order.id)")
+                        print("   - Status: \(order.status)")
+                        print("   - Total: $\(order.totalAmount)")
+                        print("   - Customer Email: \(order.customerInfo?.email ?? "nil")")
+                        print("   - Items Count: \(order.items?.count ?? 0)")
+                    }
+                    print("===== ORDER RESPONSE DETAILS END =====\n")
 
                     if response.success, let order = response.order {
+                        print("✅ ORDER SUCCESSFUL - Processing success flow...")
                         placedOrder = order
                         showingOrderSuccess = true
                         orderEmailSent = true
@@ -429,34 +525,52 @@ class CheckoutViewModel: ObservableObject {
 
                         // Handle remaining items for pickup orders
                         if checkoutState.deliveryMethod == .storePickup && selectedPickupSeller != nil && getRemainingItems().count > 0 {
+                            print("🏪 Handling pickup order with remaining items...")
                             if remainingItemsAction == .remove {
-                                // Remove all items from cart
+                                print("🗑️ Removing all items from cart")
                                 cartManager.clearCart()
                             } else if remainingItemsAction == .delivery {
-                                // Remove only the pickup items, keep remaining items for delivery
+                                print("🚚 Removing only pickup items, keeping delivery items")
                                 let pickupItems = getPickupItems()
                                 pickupItems.forEach { item in
                                     cartManager.removeItem(item.id)
                                 }
                             }
                         } else {
-                            // Clear all items for regular orders
+                            print("🧹 Clearing all items from cart (regular order)")
                             cartManager.clearCart()
                         }
 
-                        // Reset checkout state
+                        print("♻️ Resetting checkout state")
                         resetCheckoutState()
+                        print("✅ Order success flow completed")
                     } else {
+                        print("❌ ORDER FAILED")
+                        print("💬 Error Message: \(response.message)")
                         checkoutState.errorMessage = response.message
+                        print("📝 Error message set in checkout state")
                     }
                 }
             }
         } catch {
+            print("\n🚨 ===== ORDER PLACEMENT EXCEPTION =====")
+            print("❌ Exception caught: \(error)")
+            print("🔍 Error Type: \(type(of: error))")
+            print("📋 Error Description: \(error.localizedDescription)")
+            if let apiError = error as? APIError {
+                print("🌐 API Error Details: \(apiError)")
+            }
+            print("===== ORDER PLACEMENT EXCEPTION END =====\n")
+
             await MainActor.run {
                 checkoutState.isProcessing = false
-                checkoutState.errorMessage = "Failed to place order: \(error.localizedDescription)"
+                let errorMessage = "Failed to place order: \(error.localizedDescription)"
+                checkoutState.errorMessage = errorMessage
+                print("📝 Error state updated: \(errorMessage)")
             }
         }
+
+        print("🔄 ===== ASYNC ORDER PLACEMENT COMPLETED =====\n")
     }
 
     private func generateClientOrderRef() -> String {
@@ -528,21 +642,49 @@ class CheckoutViewModel: ObservableObject {
         }
 
         let subtotal = itemsToOrder.reduce(0) { $0 + $1.total }
-        let shippingCost = checkoutState.deliveryMethod.fee
-        let taxCost = 0.0
+
+        // Use dynamic shipping calculation matching frontend logic
+        let shippingCost = checkoutState.deliveryMethod == .storePickup ? 0.0 : cartManager.shippingCost
+
+        // Calculate tax based on item tax rates matching frontend logic (Lebanon VAT rate 11%)
+        let taxCost = itemsToOrder.reduce(0.0) { totalTax, item in
+            let productTaxRate = item.taxRate ?? 11.0 // Default to Lebanon's VAT rate
+            let itemSubtotal = item.price * Double(item.quantity)
+            let itemTax = (itemSubtotal * productTaxRate) / 100.0
+            return totalTax + itemTax
+        }
+
         let giftCardDiscount = checkoutState.appliedGiftCard?.discountAmount ?? 0
         let total = max(0, subtotal + shippingCost + taxCost - giftCardDiscount)
 
+        print("💰 ORDER CALCULATION DEBUG:")
+        print("   - Subtotal: $\(subtotal)")
+        print("   - Shipping Cost (dynamic): $\(shippingCost)")
+        print("   - Tax Cost (calculated): $\(taxCost)")
+        print("   - Gift Card Discount: $\(giftCardDiscount)")
+        print("   - Final Total: $\(total)")
+
         // Convert CustomerInfo to match frontend format (name instead of firstName/lastName)
         guard let customerInfo = checkoutState.customerInfo else {
+            print("❌ CRITICAL: Customer info is nil in checkout state!")
             fatalError("Customer info is required for order creation")
         }
+
+        print("👤 Creating frontend customer info:")
+        print("   - Full Name: \(customerInfo.fullName)")
+        print("   - Email: \(customerInfo.email)")
+        print("   - Phone: \(customerInfo.phone)")
 
         let frontendCustomerInfo = FrontendCustomerInfo(
             name: customerInfo.fullName,
             email: customerInfo.email,
             phone: customerInfo.phone
         )
+
+        print("📤 Frontend customer object created:")
+        print("   - Name: \(frontendCustomerInfo.name)")
+        print("   - Email: \(frontendCustomerInfo.email)")
+        print("   - Phone: \(frontendCustomerInfo.phone)")
 
         return CreateOrderRequest(
             clientOrderRef: generateClientOrderRef(),

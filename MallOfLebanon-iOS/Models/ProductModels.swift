@@ -65,6 +65,25 @@ extension AnyCodable {
     }
 }
 
+// MARK: - Raffle Support
+struct ProductRaffleInfo: Codable {
+    let raffleId: String?
+    let raffleTitle: String?
+    let ticketsPerPurchase: Int
+    let drawDate: String?
+    let raffleStatus: String?
+    let assignedAt: String?
+
+    init(raffleId: String? = nil, raffleTitle: String? = nil, ticketsPerPurchase: Int = 1, drawDate: String? = nil, raffleStatus: String? = nil, assignedAt: String? = nil) {
+        self.raffleId = raffleId
+        self.raffleTitle = raffleTitle
+        self.ticketsPerPurchase = ticketsPerPurchase
+        self.drawDate = drawDate
+        self.raffleStatus = raffleStatus
+        self.assignedAt = assignedAt
+    }
+}
+
 struct Product: Codable, Identifiable {
     let id: String
     let name: String
@@ -88,8 +107,8 @@ struct Product: Codable, Identifiable {
     let featured: Bool
     let slug: String?
     let customizationOptions: [ProductCustomization]?
-    let createdAt: Date
-    let updatedAt: Date
+    let createdAt: Date?
+    let updatedAt: Date?
 
     // MongoDB specific fields (all optional)
     let outOfStockSince: Date?
@@ -118,14 +137,17 @@ struct Product: Codable, Identifiable {
     let views: Int?
     let soldCount: Int?
     let variants: [String]?
+    let taxRate: Double? // Tax rate for this product (e.g. 11.0 for 11%)
     let reviews: [String]?
 
     // INSTALLMENT FIELDS - using basic types to avoid circular dependencies
     let hasInstallmentPlans: Bool?
     let installmentSettings: InstallmentSettings?
+    let installmentPlansRaw: [AnyCodable]?
 
-    // This will be populated from installmentPlans field by accessing InstallmentPlan models separately
-    private let installmentPlansData: [String: Any]?
+    // RAFFLE FIELDS
+    let isRaffleTicket: Bool?
+    let raffleInfo: ProductRaffleInfo?
 
     // Handle custom init to provide compatibility between different API structures
     init(from decoder: Decoder) throws {
@@ -189,7 +211,14 @@ struct Product: Codable, Identifiable {
         subcategory = try container.decodeIfPresent(String.self, forKey: .subcategory)
         brand = try container.decodeIfPresent(String.self, forKey: .brand)
         sku = try container.decode(String.self, forKey: .sku)
-        inStock = try container.decode(Bool.self, forKey: .inStock)
+        // Handle inStock as either Bool or Int (0/1)
+        if let inStockBool = try? container.decode(Bool.self, forKey: .inStock) {
+            inStock = inStockBool
+        } else if let inStockInt = try? container.decode(Int.self, forKey: .inStock) {
+            inStock = inStockInt != 0
+        } else {
+            inStock = false
+        }
 
         // Handle quantity/stock mapping - support both API structures
         if let quantityValue = try? container.decode(Int.self, forKey: .quantity) {
@@ -241,7 +270,7 @@ struct Product: Codable, Identifiable {
             ratings = ProductRatings(average: rating, count: reviewCount)
         }
 
-        tags = try container.decode([String].self, forKey: .tags)
+        tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
 
         // Handle specifications - API returns array, we need dictionary
         if let specificationsArray = try? container.decode([SpecificationItem].self, forKey: .specifications) {
@@ -254,25 +283,28 @@ struct Product: Codable, Identifiable {
             specifications = try container.decodeIfPresent([String: AnyCodable].self, forKey: .specifications)
         }
 
-        // Handle featured/isFeatured mapping - support both API structures
+        // Handle featured/isFeatured mapping - support both API structures and integer/boolean conversion
+        var featuredBool = false
+
+        // Try decoding as Bool first, then as Int for .featured
         if let featuredValue = try? container.decode(Bool.self, forKey: .featured) {
-            // Individual product API uses "featured"
-            featured = featuredValue
-            isFeatured = featuredValue
+            featuredBool = featuredValue
+        } else if let featuredInt = try? container.decode(Int.self, forKey: .featured) {
+            featuredBool = featuredInt != 0
         } else if let featuredValue = try? container.decode(Bool.self, forKey: .isFeatured) {
-            // Products list API uses "isFeatured"
-            featured = featuredValue
-            isFeatured = featuredValue
-        } else {
-            // Fallback
-            featured = try container.decodeIfPresent(Bool.self, forKey: .featured) ?? false
-            isFeatured = featured
+            featuredBool = featuredValue
+        } else if let featuredInt = try? container.decode(Int.self, forKey: .isFeatured) {
+            featuredBool = featuredInt != 0
         }
+
+        featured = featuredBool
+        isFeatured = featuredBool
 
         slug = try container.decodeIfPresent(String.self, forKey: .slug)
         customizationOptions = try container.decodeIfPresent([ProductCustomization].self, forKey: .customizationOptions)
-        createdAt = try container.decode(Date.self, forKey: .createdAt)
-        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        // Handle missing date fields with defaults
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
 
         // MongoDB specific fields (all optional)
         outOfStockSince = try container.decodeIfPresent(Date.self, forKey: .outOfStockSince)
@@ -294,13 +326,17 @@ struct Product: Codable, Identifiable {
         views = try container.decodeIfPresent(Int.self, forKey: .views)
         soldCount = try container.decodeIfPresent(Int.self, forKey: .soldCount)
         variants = try container.decodeIfPresent([String].self, forKey: .variants)
+        taxRate = try container.decodeIfPresent(Double.self, forKey: .taxRate)
         reviews = try container.decodeIfPresent([String].self, forKey: .reviews)
 
         // Installment fields
-        // installmentPlans = try container.decodeIfPresent([InstallmentPlan].self, forKey: .installmentPlans)
+        installmentPlansRaw = try container.decodeIfPresent([AnyCodable].self, forKey: .installmentPlansRaw)
         hasInstallmentPlans = try container.decodeIfPresent(Bool.self, forKey: .hasInstallmentPlans)
         installmentSettings = try container.decodeIfPresent(InstallmentSettings.self, forKey: .installmentSettings)
-        installmentPlansData = nil // Temporarily set to nil during build process
+
+        // Raffle fields
+        isRaffleTicket = try container.decodeIfPresent(Bool.self, forKey: .isRaffleTicket)
+        raffleInfo = try container.decodeIfPresent(ProductRaffleInfo.self, forKey: .raffleInfo)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -328,8 +364,8 @@ struct Product: Codable, Identifiable {
         try container.encode(featured, forKey: .featured)
         try container.encodeIfPresent(slug, forKey: .slug)
         try container.encodeIfPresent(customizationOptions, forKey: .customizationOptions)
-        try container.encode(createdAt, forKey: .createdAt)
-        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encodeIfPresent(createdAt, forKey: .createdAt)
+        try container.encodeIfPresent(updatedAt, forKey: .updatedAt)
 
         // MongoDB specific fields
         try container.encodeIfPresent(outOfStockSince, forKey: .outOfStockSince)
@@ -361,9 +397,13 @@ struct Product: Codable, Identifiable {
         try container.encodeIfPresent(reviews, forKey: .reviews)
 
         // Installment fields
-        // try container.encodeIfPresent(installmentPlans, forKey: .installmentPlans)
+        try container.encodeIfPresent(installmentPlansRaw, forKey: .installmentPlansRaw)
         try container.encodeIfPresent(hasInstallmentPlans, forKey: .hasInstallmentPlans)
         try container.encodeIfPresent(installmentSettings, forKey: .installmentSettings)
+
+        // Raffle fields
+        try container.encodeIfPresent(isRaffleTicket, forKey: .isRaffleTicket)
+        try container.encodeIfPresent(raffleInfo, forKey: .raffleInfo)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -377,11 +417,14 @@ struct Product: Codable, Identifiable {
         // New API fields
         case _id, seller, store, title, shortDescription, comparePrice, costPrice, stock
         case isActive, isApproved, isFeatured, ratings, metaKeywords, views, soldCount
-        case variants, reviews
+        case variants, taxRate, reviews
 
         // Installment fields
         case hasInstallmentPlans, installmentSettings
-        // case installmentPlans - commented for build
+        case installmentPlansRaw = "installmentPlans"
+
+        // Raffle fields
+        case isRaffleTicket, raffleInfo
     }
 
     // Computed properties for backward compatibility and enhanced functionality
@@ -427,43 +470,11 @@ struct Product: Codable, Identifiable {
         return hasInstallmentPlans == true
     }
 
-    // var activeInstallmentPlans: [InstallmentPlan] {
-    //     return installmentPlans?.filter { $0.isActive } ?? []
-    // }
+    // Simple computed property to access raw installment plans data
+    var installmentPlans: [[String: Any]]? {
+        return installmentPlansRaw?.compactMap { $0.value as? [String: Any] }
+    }
 
-    // func getInstallmentPlan(by id: String) -> InstallmentPlan? {
-    //     return installmentPlans?.first { $0.id == id }
-    // }
-
-    // func isEligibleForInstallment(orderAmount: Double) -> Bool {
-    //     return activeInstallmentPlans.contains { plan in
-    //         orderAmount >= plan.minimumOrderAmount &&
-    //         (plan.maximumOrderAmount == nil || orderAmount <= plan.maximumOrderAmount!)
-    //     }
-    // }
-
-    // func getEligibleInstallmentPlans(for orderAmount: Double) -> [InstallmentPlan] {
-    //     return activeInstallmentPlans.filter { plan in
-    //         orderAmount >= plan.minimumOrderAmount &&
-    //         (plan.maximumOrderAmount == nil || orderAmount <= plan.maximumOrderAmount!)
-    //     }
-    // }
-
-    // func getMinimumMonthlyPayment() -> Double? {
-    //     guard hasInstallments else { return nil }
-
-    //     let eligiblePlans = getEligibleInstallmentPlans(for: price)
-    //     var minMonthly: Double?
-
-    //     for plan in eligiblePlans {
-    //         let calculation = plan.calculateDetails(for: price)
-    //         if minMonthly == nil || calculation.monthlyPayment < minMonthly! {
-    //             minMonthly = calculation.monthlyPayment
-    //         }
-    //     }
-
-    //     return minMonthly
-    // }
 }
 
 enum ProductStatus: String, Codable {
@@ -574,6 +585,34 @@ struct PaginationInfo: Codable {
     let hasNext: Bool
     let hasPrev: Bool
 
+    // Custom initializer to handle integer/boolean conversion
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        page = try container.decode(Int.self, forKey: .page)
+        limit = try container.decode(Int.self, forKey: .limit)
+        total = try container.decode(Int.self, forKey: .total)
+        pages = try container.decode(Int.self, forKey: .pages)
+
+        // Handle hasNext as either Bool or Int (0/1)
+        if let nextBool = try? container.decode(Bool.self, forKey: .hasNext) {
+            hasNext = nextBool
+        } else if let nextInt = try? container.decode(Int.self, forKey: .hasNext) {
+            hasNext = nextInt != 0
+        } else {
+            hasNext = false
+        }
+
+        // Handle hasPrev as either Bool or Int (0/1)
+        if let prevBool = try? container.decode(Bool.self, forKey: .hasPrev) {
+            hasPrev = prevBool
+        } else if let prevInt = try? container.decode(Int.self, forKey: .hasPrev) {
+            hasPrev = prevInt != 0
+        } else {
+            hasPrev = false
+        }
+    }
+
     // Computed properties for backward compatibility
     var currentPage: Int { page }
     var totalProducts: Int { total }
@@ -664,40 +703,83 @@ struct ProductSearchParams {
     }
 
     func toQueryItems() -> [URLQueryItem] {
+        print("\n🔧 ===== BUILDING QUERY ITEMS =====\n")
+        print("📋 Input parameters for toQueryItems():")
+        print("   - category: \(category ?? "nil")")
+        print("   - subcategory: \(subcategory ?? "nil")")
+        print("   - sellerId: \(sellerId ?? "nil")")
+        print("   - minPrice: \(minPrice?.description ?? "nil")")
+        print("   - maxPrice: \(maxPrice?.description ?? "nil")")
+        print("   - search: \(search ?? "nil")")
+        print("   - sortBy: \(sortBy.rawValue)")
+        print("   - page: \(page)")
+        print("   - limit: \(limit)")
+
         var items: [URLQueryItem] = []
 
         if let category = category {
+            print("➕ Adding category: \(category)")
             items.append(URLQueryItem(name: "category", value: category))
+        } else {
+            print("➖ No category specified")
         }
+
         if let subcategory = subcategory {
+            print("➕ Adding subcategory: \(subcategory)")
             items.append(URLQueryItem(name: "subcategory", value: subcategory))
+        } else {
+            print("➖ No subcategory specified")
         }
+
         if let sellerId = sellerId {
+            print("➕ Adding sellerId: \(sellerId)")
             items.append(URLQueryItem(name: "sellerId", value: sellerId))
         }
+
         if let minPrice = minPrice {
+            print("➕ Adding minPrice: \(minPrice)")
             items.append(URLQueryItem(name: "minPrice", value: String(minPrice)))
         }
+
         if let maxPrice = maxPrice {
+            print("➕ Adding maxPrice: \(maxPrice)")
             items.append(URLQueryItem(name: "maxPrice", value: String(maxPrice)))
         }
+
         if let search = search {
+            print("➕ Adding search: \(search)")
             items.append(URLQueryItem(name: "search", value: search))
         }
 
+        print("➕ Adding sortBy: \(sortBy.rawValue)")
         items.append(URLQueryItem(name: "sortBy", value: sortBy.rawValue))
+
+        print("➕ Adding page: \(page)")
         items.append(URLQueryItem(name: "page", value: String(page)))
+
+        print("➕ Adding limit: \(limit)")
         items.append(URLQueryItem(name: "limit", value: String(limit)))
 
         if let tags = tags {
+            print("➕ Adding tags: \(tags.joined(separator: ","))")
             items.append(URLQueryItem(name: "tags", value: tags.joined(separator: ",")))
         }
+
         if let inStock = inStock {
+            print("➕ Adding inStock: \(inStock)")
             items.append(URLQueryItem(name: "inStock", value: String(inStock)))
         }
+
         if let featured = featured {
+            print("➕ Adding featured: \(featured)")
             items.append(URLQueryItem(name: "featured", value: String(featured)))
         }
+
+        print("\n🏁 FINAL QUERY ITEMS (\(items.count) total):")
+        for (index, item) in items.enumerated() {
+            print("   [\(index + 1)] \(item.name) = \(item.value ?? "nil")")
+        }
+        print("\n===== END QUERY ITEMS BUILDING =====\n")
 
         return items
     }
@@ -786,10 +868,106 @@ struct InstallmentSettings: Codable {
     let enabled: Bool
     let maxInstallmentAmount: Double?
     let eligibilityCriteria: EligibilityCriteria?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        // Handle enabled as either Bool or Int (0/1)
+        if let enabledBool = try? container.decode(Bool.self, forKey: .enabled) {
+            enabled = enabledBool
+        } else if let enabledInt = try? container.decode(Int.self, forKey: .enabled) {
+            enabled = enabledInt != 0
+        } else {
+            enabled = false
+        }
+
+        maxInstallmentAmount = try container.decodeIfPresent(Double.self, forKey: .maxInstallmentAmount)
+        eligibilityCriteria = try container.decodeIfPresent(EligibilityCriteria.self, forKey: .eligibilityCriteria)
+    }
 }
 
 struct EligibilityCriteria: Codable {
     let minAge: Int
     let minIncome: Double
     let creditCheckRequired: Bool
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        minAge = try container.decode(Int.self, forKey: .minAge)
+        minIncome = try container.decode(Double.self, forKey: .minIncome)
+
+        // Handle creditCheckRequired as either Bool or Int (0/1)
+        if let creditBool = try? container.decode(Bool.self, forKey: .creditCheckRequired) {
+            creditCheckRequired = creditBool
+        } else if let creditInt = try? container.decode(Int.self, forKey: .creditCheckRequired) {
+            creditCheckRequired = creditInt != 0
+        } else {
+            creditCheckRequired = false
+        }
+    }
+}
+
+// MARK: - Product Extension for Raffle Support
+
+extension Product {
+    // Convenience initializer for raffle products
+    init(id: String, name: String, description: String, price: Double, originalPrice: Double?, sellerId: String, sellerName: String, category: String, subcategory: String?, brand: String?, sku: String, inStock: Bool, quantity: Int, status: ProductStatus, images: [String], rating: Double, reviewCount: Int, tags: [String], specifications: [String: AnyCodable]?, featured: Bool, slug: String?, customizationOptions: [ProductCustomization]?, createdAt: Date?, updatedAt: Date?, outOfStockSince: Date?, baseQuantity: Int?, hasCustomizations: Bool?, stockManagement: String?, categoryTemplate: String?, categoryFields: [String: AnyCodable]?, hasComparison: Bool?, matchingData: AnyCodable?, comparisonGroup: AnyCodable?, seller: String?, store: String?, title: String?, shortDescription: String?, comparePrice: Double?, costPrice: Double?, stock: Int?, isActive: Bool?, isApproved: Bool?, isFeatured: Bool?, ratings: ProductRatings?, metaKeywords: [String]?, views: Int?, soldCount: Int?, variants: [String]?, taxRate: Double?, reviews: [String]?, hasInstallmentPlans: Bool?, installmentSettings: InstallmentSettings?, installmentPlansRaw: [AnyCodable]?, isRaffleTicket: Bool?, raffleInfo: ProductRaffleInfo?) {
+
+        self.id = id
+        self.name = name
+        self.description = description
+        self.price = price
+        self.originalPrice = originalPrice
+        self.sellerId = sellerId
+        self.sellerName = sellerName
+        self.category = category
+        self.subcategory = subcategory
+        self.brand = brand
+        self.sku = sku
+        self.inStock = inStock
+        self.quantity = quantity
+        self.status = status
+        self.images = images
+        self.rating = rating
+        self.reviewCount = reviewCount
+        self.tags = tags
+        self.specifications = specifications
+        self.featured = featured
+        self.slug = slug
+        self.customizationOptions = customizationOptions
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.outOfStockSince = outOfStockSince
+        self.baseQuantity = baseQuantity
+        self.hasCustomizations = hasCustomizations
+        self.stockManagement = stockManagement
+        self.categoryTemplate = categoryTemplate
+        self.categoryFields = categoryFields
+        self.hasComparison = hasComparison
+        self.matchingData = matchingData
+        self.comparisonGroup = comparisonGroup
+        self.seller = seller
+        self.store = store
+        self.title = title
+        self.shortDescription = shortDescription
+        self.comparePrice = comparePrice
+        self.costPrice = costPrice
+        self.stock = stock
+        self.isActive = isActive
+        self.isApproved = isApproved
+        self.isFeatured = isFeatured
+        self.ratings = ratings
+        self.metaKeywords = metaKeywords
+        self.views = views
+        self.soldCount = soldCount
+        self.variants = variants
+        self.taxRate = taxRate
+        self.reviews = reviews
+        self.hasInstallmentPlans = hasInstallmentPlans
+        self.installmentSettings = installmentSettings
+        self.installmentPlansRaw = installmentPlansRaw
+        self.isRaffleTicket = isRaffleTicket
+        self.raffleInfo = raffleInfo
+    }
 }

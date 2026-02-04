@@ -790,20 +790,6 @@ class APIService: ObservableObject {
         )
     }
 
-    func calculateShippingAsync(_ shippingRequest: ShippingCalculationRequest) async throws -> ShippingCalculationResponse {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-
-        let requestBody = try encoder.encode(shippingRequest)
-
-        return try await performRequestAsync(
-            endpoint: "/shipping/calculate",
-            method: HTTPMethod.POST,
-            body: requestBody,
-            responseType: ShippingCalculationResponse.self
-        )
-    }
-
     // MARK: - Private Helper for Async Requests with Headers
 
     private func performRequestAsync<T: Codable>(

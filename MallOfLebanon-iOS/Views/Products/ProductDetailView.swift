@@ -44,6 +44,7 @@ struct ProductDetailView: View {
                         // Installment Plans
                         if viewModel.hasInstallmentPlans {
                             InstallmentPlansSection(
+                                product: viewModel.product!,
                                 calculatedPrice: viewModel.calculatedPrice,
                                 selectedInstallmentPlan: $viewModel.selectedInstallmentPlan,
                                 showInstallmentPlans: $viewModel.showInstallmentPlans
@@ -528,22 +529,37 @@ struct SimpleInstallmentPlan: Identifiable {
     let interestRate: Double
     let minimumOrderAmount: Double
     let processingFeePercentage: Double
+    let processingFeeFixed: Double?
     let description: String?
 
     func calculatePayments(orderAmount: Double) -> InstallmentCalculation {
-        let downPayment = orderAmount * (downPaymentPercentage / 100)
+        let downPayment = (orderAmount * downPaymentPercentage) / 100
         let remainingAmount = orderAmount - downPayment
-        let processingFee = orderAmount * (processingFeePercentage / 100)
-        let totalInterest = remainingAmount * (interestRate / 100) * Double(duration) / 12
-        let totalAmount = orderAmount + totalInterest + processingFee
-        let monthlyPayment = (remainingAmount + totalInterest) / Double(duration)
+
+        // Calculate processing fee - use fixed fee if available, otherwise percentage
+        var processingFee = orderAmount * (processingFeePercentage / 100)
+        if let fixedFee = processingFeeFixed {
+            processingFee += fixedFee
+        }
+
+        // Calculate interest using frontend logic: annual rate / 12 months * duration
+        var totalWithInterest = remainingAmount
+        var totalInterest: Double = 0
+        if interestRate > 0 {
+            let monthlyRate = interestRate / 100 / 12
+            totalInterest = remainingAmount * monthlyRate * Double(duration)
+            totalWithInterest = remainingAmount + totalInterest
+        }
+
+        let monthlyPayment = totalWithInterest / Double(duration)
+        let totalAmount = downPayment + totalWithInterest + processingFee
 
         return InstallmentCalculation(
-            downPayment: downPayment,
-            monthlyPayment: monthlyPayment,
-            totalAmount: totalAmount,
-            totalInterest: totalInterest,
-            processingFee: processingFee
+            downPayment: round(downPayment * 100) / 100,
+            monthlyPayment: round(monthlyPayment * 100) / 100,
+            totalAmount: round(totalAmount * 100) / 100,
+            totalInterest: round(totalInterest * 100) / 100,
+            processingFee: round(processingFee * 100) / 100
         )
     }
 }
@@ -557,46 +573,97 @@ struct InstallmentCalculation {
 }
 
 struct InstallmentPlansSection: View {
+    let product: Product
     let calculatedPrice: Double
     @Binding var selectedInstallmentPlan: InstallmentPlanSelection?
     @Binding var showInstallmentPlans: Bool
 
     private var eligiblePlans: [SimpleInstallmentPlan] {
-        // Sample installment plans - in production this would come from the product or API
-        let allPlans = [
-            SimpleInstallmentPlan(
-                id: "plan_3m",
-                planName: "3 Month Plan",
-                duration: 3,
-                downPaymentPercentage: 30.0,
-                interestRate: 3.0,
-                minimumOrderAmount: 200.0,
-                processingFeePercentage: 1.5,
-                description: "Quick payment plan for smaller purchases"
-            ),
-            SimpleInstallmentPlan(
-                id: "plan_6m",
-                planName: "6 Month Plan",
-                duration: 6,
-                downPaymentPercentage: 20.0,
-                interestRate: 5.0,
-                minimumOrderAmount: 500.0,
-                processingFeePercentage: 2.0,
-                description: "Perfect for short-term financing"
-            ),
-            SimpleInstallmentPlan(
-                id: "plan_12m",
-                planName: "12 Month Plan",
-                duration: 12,
-                downPaymentPercentage: 15.0,
-                interestRate: 8.0,
-                minimumOrderAmount: 1000.0,
-                processingFeePercentage: 2.5,
-                description: "Popular choice for larger purchases"
-            )
-        ]
+        // Get installment plans from product API data instead of hardcoded values
+        guard let apiPlans = product.installmentPlans else {
+            return []
+        }
 
-        return allPlans.filter { $0.minimumOrderAmount <= calculatedPrice }
+        return apiPlans.compactMap { planDict -> SimpleInstallmentPlan? in
+            // Extract values from the dictionary
+            guard let id = planDict["id"] as? String,
+                  let planName = planDict["planName"] as? String,
+                  let duration = planDict["duration"] as? Int,
+                  let isActive = planDict["isActive"] as? Bool else {
+                return nil
+            }
+
+            // Handle numeric fields that could be Int or Double
+            let downPaymentPercentage: Double = {
+                if let doubleValue = planDict["downPaymentPercentage"] as? Double {
+                    return doubleValue
+                } else if let intValue = planDict["downPaymentPercentage"] as? Int {
+                    return Double(intValue)
+                }
+                return 0.0
+            }()
+
+            let interestRate: Double = {
+                if let doubleValue = planDict["interestRate"] as? Double {
+                    return doubleValue
+                } else if let intValue = planDict["interestRate"] as? Int {
+                    return Double(intValue)
+                }
+                return 0.0
+            }()
+
+            let minimumOrderAmount: Double = {
+                if let doubleValue = planDict["minimumOrderAmount"] as? Double {
+                    return doubleValue
+                } else if let intValue = planDict["minimumOrderAmount"] as? Int {
+                    return Double(intValue)
+                }
+                return 0.0
+            }()
+
+            // Only show plans that are active and meet minimum order requirements
+            guard isActive && calculatedPrice >= minimumOrderAmount else {
+                return nil
+            }
+
+            // Also check maximum order amount if it exists - handle Int or Double
+            if let maxAmountDouble = planDict["maximumOrderAmount"] as? Double, calculatedPrice > maxAmountDouble {
+                return nil
+            } else if let maxAmountInt = planDict["maximumOrderAmount"] as? Int, calculatedPrice > Double(maxAmountInt) {
+                return nil
+            }
+
+            // Handle processing fee fields that could be Int or Double
+            let processingFeePercentage: Double = {
+                if let doubleValue = planDict["processingFeePercentage"] as? Double {
+                    return doubleValue
+                } else if let intValue = planDict["processingFeePercentage"] as? Int {
+                    return Double(intValue)
+                }
+                return 0.0
+            }()
+
+            let processingFeeFixed: Double? = {
+                if let doubleValue = planDict["processingFee"] as? Double {
+                    return doubleValue
+                } else if let intValue = planDict["processingFee"] as? Int {
+                    return Double(intValue)
+                }
+                return nil
+            }()
+
+            return SimpleInstallmentPlan(
+                id: id,
+                planName: planName,
+                duration: duration,
+                downPaymentPercentage: downPaymentPercentage,
+                interestRate: interestRate,
+                minimumOrderAmount: minimumOrderAmount,
+                processingFeePercentage: processingFeePercentage,
+                processingFeeFixed: processingFeeFixed,
+                description: planDict["description"] as? String
+            )
+        }
     }
 
     var body: some View {

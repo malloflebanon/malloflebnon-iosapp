@@ -4,7 +4,7 @@ import Combine
 class APIService: ObservableObject {
     static let shared = APIService()
 
-    private let baseURL = "http://172.30.0.167:3007/api"
+    private let baseURL = "http://192.168.1.11:3007/api"
     private let session: URLSession
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
@@ -787,20 +787,6 @@ class APIService: ObservableObject {
             body: body,
             responseType: DocumentUploadResponse.self,
             additionalHeaders: ["Content-Type": "multipart/form-data; boundary=\(boundary)"]
-        )
-    }
-
-    func calculateShippingAsync(_ shippingRequest: ShippingCalculationRequest) async throws -> ShippingCalculationResponse {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-
-        let requestBody = try encoder.encode(shippingRequest)
-
-        return try await performRequestAsync(
-            endpoint: "/shipping/calculate",
-            method: HTTPMethod.POST,
-            body: requestBody,
-            responseType: ShippingCalculationResponse.self
         )
     }
 

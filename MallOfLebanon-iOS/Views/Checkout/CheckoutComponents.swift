@@ -324,6 +324,7 @@ struct DeliveryMethodCard: View {
     let method: DeliveryMethod
     let isSelected: Bool
     let onSelect: () -> Void
+    @ObservedObject var cartManager = CartManager.shared
 
     var body: some View {
         Button(action: onSelect) {
@@ -349,14 +350,25 @@ struct DeliveryMethodCard: View {
                 Spacer()
 
                 VStack(alignment: .trailing) {
-                    if method.fee > 0 {
-                        Text("$\(String(format: "%.2f", method.fee))")
-                            .font(.headline)
-                                    .foregroundColor(.blue)
+                    if cartManager.isCalculatingShipping && method == .homeDelivery {
+                        HStack(spacing: 4) {
+                            ProgressView()
+                                .scaleEffect(0.6)
+                            Text("Calculating...")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                     } else {
-                        Text("FREE")
-                            .font(.headline)
-                                    .foregroundColor(.green)
+                        let shippingCost = cartManager.getShippingCost(for: method)
+                        if shippingCost > 0 {
+                            Text("$\(String(format: "%.2f", shippingCost))")
+                                .font(.headline)
+                                        .foregroundColor(.blue)
+                        } else {
+                            Text("FREE")
+                                .font(.headline)
+                                        .foregroundColor(.green)
+                        }
                     }
 
                     Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
@@ -634,15 +646,6 @@ struct OrderSummarySection: View {
                     }
 
                     Divider()
-
-                    // Subtotal
-                    HStack {
-                        Text("Subtotal")
-                            .font(.subheadline)
-                        Spacer()
-                        Text("$\(String(format: "%.2f", summary.subtotal))")
-                            .font(.subheadline)
-                    }
 
                     // Delivery Fee
                     HStack {

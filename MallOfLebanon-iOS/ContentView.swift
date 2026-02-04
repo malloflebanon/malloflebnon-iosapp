@@ -174,9 +174,6 @@ struct WelcomeView: View {
                             .fontWeight(.bold)
                             .foregroundColor(.primary)
 
-                        Text("Your shopping destination")
-                            .font(.title3)
-                            .foregroundColor(.secondary)
                     }
                 }
 
@@ -319,21 +316,15 @@ struct HomeView: View {
         NavigationView {
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    // Welcome Section
-                    welcomeSection
 
-                    // Search Bar
-                    searchSection
+                    // Raffle Section - positioned at the top
+                    RaffleSection()
 
                     // Homepage Sections Grid
                     if !viewModel.homepageSections.isEmpty {
                         homepageSectionsView
                     }
 
-                    // Collections/Featured Section
-                    if !viewModel.collections.isEmpty {
-                        collectionsSection
-                    }
 
                     // Categories Horizontal Scroll
                     if !viewModel.categories.isEmpty {
@@ -352,6 +343,7 @@ struct HomeView: View {
                 .padding(.horizontal)
             }
             .navigationTitle("Mall Of Lebanon")
+            .navigationBarTitleDisplayMode(.inline)
             .navigationBarItems(
                 leading: filterButton,
                 trailing: sortButton
@@ -361,8 +353,16 @@ struct HomeView: View {
             }
         }
         .onAppear {
-            print("🚀 HomeView onAppear - Refreshing products to ensure fresh data")
-            viewModel.refreshProducts()
+            print("🚀 HomeView onAppear - Loading initial data without clearing filters")
+            // Only load initial data if we don't have categories or products yet
+            // This preserves any existing category filters
+            if viewModel.categories.isEmpty {
+                viewModel.loadCategories()
+                viewModel.loadHomepageSections()
+            }
+            if viewModel.products.isEmpty {
+                viewModel.loadProducts(resetResults: true)
+            }
         }
         .alert("Error", isPresented: .constant(viewModel.errorMessage != nil && viewModel.products.isEmpty && !viewModel.isLoading)) {
             Button("OK") {
@@ -404,6 +404,7 @@ struct HomeView: View {
         .padding(.vertical, 8)
     }
 
+
     private var categoriesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -420,6 +421,7 @@ struct HomeView: View {
                         category: nil,
                         isSelected: viewModel.selectedCategory == nil
                     ) {
+                        print("🏷️ HomeView: 'All' category tapped")
                         viewModel.filterByCategory(nil)
                     }
                     ForEach(viewModel.categories.prefix(9)) { category in
@@ -427,6 +429,7 @@ struct HomeView: View {
                             category: category,
                             isSelected: viewModel.selectedCategory?.id == category.id
                         ) {
+                            print("🏷️ HomeView: '\(category.name)' category tapped (ID: \(category.id))")
                             viewModel.filterByCategory(category)
                         }
                     }
@@ -1085,12 +1088,49 @@ struct CategoryCard: View {
                             )
                     },
                     failureView: {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.gray.opacity(0.3))
-                            .overlay(
-                                Image(systemName: category == nil ? "square.grid.2x2" : "tag")
-                                    .foregroundColor(.gray)
-                            )
+                        if category == nil {
+                            // Custom design for "All" category
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [
+                                            Color.blue.opacity(0.8),
+                                            Color.purple.opacity(0.9),
+                                            Color.indigo.opacity(0.7)
+                                        ]),
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .overlay(
+                                    ZStack {
+                                        // Background pattern
+                                        Circle()
+                                            .fill(Color.white.opacity(0.1))
+                                            .frame(width: 40, height: 40)
+                                            .offset(x: -10, y: -10)
+
+                                        Circle()
+                                            .fill(Color.white.opacity(0.08))
+                                            .frame(width: 25, height: 25)
+                                            .offset(x: 15, y: 15)
+
+                                        // Main icon
+                                        Image(systemName: "square.grid.3x3")
+                                            .font(.title2.weight(.semibold))
+                                            .foregroundColor(.white)
+                                    }
+                                )
+                                .shadow(color: .blue.opacity(0.3), radius: 4, x: 0, y: 2)
+                        } else {
+                            // Default for other categories
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.gray.opacity(0.3))
+                                .overlay(
+                                    Image(systemName: "tag")
+                                        .foregroundColor(.gray)
+                                )
+                        }
                     }
                 )
                 .aspectRatio(contentMode: .fill)
@@ -1506,3 +1546,419 @@ struct NotificationToggleRow: View {
         .padding(.vertical, 4)
     }
 }
+
+// MARK: - RaffleSection View
+struct RaffleSection: View {
+    @State private var raffles: [APIRaffle] = []
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+    @State private var cancellables = Set<AnyCancellable>()
+    @EnvironmentObject var cartManager: CartManager
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Section Header
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Image(systemName: "gift.fill")
+                            .foregroundColor(.purple)
+                            .font(.title3)
+                        Text("Active Raffles")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.primary)
+                    }
+                    Text("Win amazing prizes with every purchase!")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+            }
+
+            // Content
+            if isLoading {
+                loadingView
+            } else if let error = errorMessage {
+                errorView(error)
+            } else if raffles.isEmpty {
+                noRafflesView
+            } else {
+                raffleCardsView
+            }
+        }
+        .onAppear {
+            loadRaffles()
+        }
+    }
+
+    private var loadingView: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .scaleEffect(1.2)
+            Text("Loading raffles...")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 120)
+        .background(Color(.systemBackground))
+        .cornerRadius(16)
+    }
+
+    private func errorView(_ error: String) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.largeTitle)
+                .foregroundColor(.orange)
+            Text("Failed to load raffles")
+                .font(.headline)
+                .foregroundColor(.primary)
+            Text(error)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            Button("Retry") {
+                loadRaffles()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(Color.blue)
+            .foregroundColor(.white)
+            .cornerRadius(8)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(20)
+        .background(Color(.systemBackground))
+        .cornerRadius(16)
+    }
+
+    private var noRafflesView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "gift")
+                .font(.largeTitle)
+                .foregroundColor(.gray)
+            Text("No Active Raffles")
+                .font(.headline)
+                .foregroundColor(.primary)
+            Text("Check back soon for amazing prize opportunities!")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(20)
+        .background(Color(.systemBackground))
+        .cornerRadius(16)
+    }
+
+    private var raffleCardsView: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: 16) {
+                ForEach(raffles) { raffle in
+                    RaffleCard(raffle: raffle) {
+                        handleBuyTicket(raffle: raffle)
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+    }
+
+    private func loadRaffles() {
+        isLoading = true
+        errorMessage = nil
+
+        Task {
+            do {
+                let response = try await APIService.shared.fetchRafflesAsync()
+
+                await MainActor.run {
+                    self.raffles = response.raffles
+                    self.isLoading = false
+                }
+
+                print("🎫 Successfully loaded \(response.raffles.count) raffles")
+            } catch {
+                await MainActor.run {
+                    self.errorMessage = error.localizedDescription
+                    self.isLoading = false
+                }
+                print("❌ Failed to load raffles: \(error)")
+            }
+        }
+    }
+
+    private func handleBuyTicket(raffle: APIRaffle) {
+        print("\n🎯 ===== ENTER RAFFLE BUTTON CLICKED =====")
+        print("🎫 Raffle Title: \(raffle.title)")
+        print("🆔 Raffle ID: \(raffle.id)")
+        print("🛒 Adding raffle ticket to cart...")
+
+        // For now, use the fallback approach since we need proper API integration
+        if let raffleProduct = createFallbackRaffleProduct(from: raffle) {
+            print("✅ Created raffle product:")
+            print("   - ID: \(raffleProduct.id)")
+            print("   - Name: \(raffleProduct.name)")
+            print("   - Price: $\(raffleProduct.price)")
+            print("   - Is Raffle Ticket: \(raffleProduct.isRaffleTicket ?? false)")
+
+            // Add to cart using CartManager
+            cartManager.addProduct(raffleProduct, quantity: 1)
+
+            print("🛒 Product added to cart!")
+            print("🧮 Current cart count: \(cartManager.itemCount)")
+            print("💰 Current cart total: $\(cartManager.total)")
+        } else {
+            print("❌ Failed to create raffle product from: \(raffle.title)")
+        }
+
+        print("===== END ENTER RAFFLE PROCESSING =====\n")
+    }
+
+    // MARK: - Helper Functions
+
+    private func createFallbackRaffleProduct(from raffle: APIRaffle, ticketCount: Int = 1) -> Product? {
+        // Use ACTUAL raffle product ID from the API response (not hardcoded)
+        guard let raffleProduct = raffle.products?.first else {
+            print("❌ No raffle products available for \(raffle.title)")
+            return nil
+        }
+
+        let actualProductId = raffleProduct.id
+        let productPrice = raffleProduct.price ?? 5.0
+        let productName = raffleProduct.name
+
+        print("✅ Using ACTUAL raffle ticket product from API")
+        print("   - Using ACTUAL Product ID: \(actualProductId)")
+        print("   - Product Name: \(productName)")
+        print("   - Ticket Price: $\(productPrice)")
+        print("   - Raffle ID: \(raffle.id)")
+
+        // Create a Product object that matches the web frontend approach
+        return Product(
+            id: actualProductId, // Use ACTUAL product ID from API (same as web frontend)
+            name: "🎫 \(raffle.title) - Entry Ticket",
+            description: "Raffle entry for \(raffle.title). Each purchase gives you \(ticketCount) ticket(s) to win \(raffle.prizeCurrency ?? "$")\(raffle.prizeValue ?? 0)!",
+            price: productPrice,
+            originalPrice: productPrice,
+            sellerId: "mall-of-lebanon",
+            sellerName: "Mall of Lebanon",
+            category: "raffle",
+            subcategory: "tickets",
+            brand: "Mall of Lebanon",
+            sku: "RAFFLE-\(raffle.id)",
+            inStock: true,
+            quantity: 1000,
+            status: (raffle.isActive ?? true) ? .active : .inactive,
+            images: [raffle.prizeImage ?? ""],
+            rating: 5.0,
+            reviewCount: 0,
+            tags: ["raffle", "giveaway", "prize"],
+            specifications: nil,
+            featured: true,
+            slug: "raffle-\(raffle.id)",
+            customizationOptions: nil,
+            createdAt: Date(),
+            updatedAt: Date(),
+            outOfStockSince: nil,
+            baseQuantity: nil,
+            hasCustomizations: false,
+            stockManagement: "auto",
+            categoryTemplate: nil,
+            categoryFields: nil,
+            hasComparison: false,
+            matchingData: nil,
+            comparisonGroup: nil,
+            seller: "Mall of Lebanon",
+            store: "Mall of Lebanon",
+            title: productName,
+            shortDescription: "Win \(raffle.title)!",
+            comparePrice: nil,
+            costPrice: nil,
+            stock: max(0, (raffle.maxTickets ?? 1000) - (raffle.currentTickets ?? 0)),
+            isActive: raffle.isActive ?? true,
+            isApproved: true,
+            isFeatured: true,
+            ratings: nil,
+            metaKeywords: ["raffle", "giveaway", raffle.title],
+            views: 0,
+            soldCount: raffle.currentTickets ?? 0,
+            variants: nil,
+            taxRate: nil,
+            reviews: nil,
+            hasInstallmentPlans: false,
+            installmentSettings: nil,
+            installmentPlansRaw: nil,
+            isRaffleTicket: true, // This flag is crucial for backend processing
+            raffleInfo: ProductRaffleInfo(
+                raffleId: raffle.id,
+                raffleTitle: raffle.title,
+                ticketsPerPurchase: ticketCount,
+                drawDate: raffle.drawDate
+            )
+        )
+    }
+}
+
+struct RaffleCard: View {
+    let raffle: APIRaffle
+    let onBuyTicket: () -> Void
+
+    private func formatPrizeValue(_ raffle: APIRaffle) -> String {
+        // First try to use the API's formatted value
+        if let formatted = raffle.formattedPrizeValue, !formatted.isEmpty {
+            return formatted
+        }
+
+        // Fallback to formatting the raw value
+        if let value = raffle.prizeValue {
+            if value >= 1000 {
+                return String(format: "%.0fK", value / 1000)
+            } else {
+                return String(format: "%.0f", value)
+            }
+        }
+
+        // Final fallback
+        return "TBD"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Prize Image
+            CachedImageView(
+                url: raffle.prizeImage.flatMap { URL(string: $0) },
+                placeholder: {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.3))
+                        .overlay(ProgressView().scaleEffect(0.6))
+                },
+                failureView: {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.blue.opacity(0.1))
+                        .overlay(
+                            Image(systemName: "gift.fill")
+                                .foregroundColor(.blue)
+                                .font(.title3)
+                        )
+                }
+            )
+            .aspectRatio(contentMode: .fill)
+            .frame(width: 280, height: 140)
+            .clipped()
+            .cornerRadius(12)
+
+            // Info
+            VStack(alignment: .leading, spacing: 8) {
+                Text(raffle.title)
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                HStack {
+                    Text(raffle.prizeCurrency ?? "USD")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(formatPrizeValue(raffle))
+                        .font(.title3)
+                        .fontWeight(.bold)
+                        .foregroundColor(.green)
+                    Text("VALUE")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+
+                Text(raffle.timeLeftText ?? "Time TBD")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+
+                // Progress
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(raffle.progressText ?? "Progress N/A")
+                            .font(.caption2)
+                            .foregroundColor(.blue)
+                        Spacer()
+                        Text("\(raffle.percentageSold ?? 0)% Sold")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(Color.gray.opacity(0.2))
+                                .frame(height: 4)
+
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [Color.blue, Color.purple]),
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(
+                                    width: max(0, geometry.size.width * (CGFloat(raffle.percentageSold ?? 0) / 100.0)),
+                                    height: 4
+                                )
+                        }
+                    }
+                    .frame(height: 4)
+                }
+            }
+
+            // Entry Product Info
+            if let products = raffle.products, let firstProduct = products.first {
+                HStack {
+                    Image(systemName: "ticket.fill")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                    Text("\(firstProduct.name) - $\(firstProduct.formattedPrice ?? String(format: "%.2f", firstProduct.price ?? 0.0))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                    Spacer()
+                }
+                .padding(.bottom, 4)
+            }
+
+            // Button
+            Button(action: onBuyTicket) {
+                HStack {
+                    Image(systemName: "gift.fill")
+                        .font(.subheadline)
+                    Text("Enter Raffle")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    if let products = raffle.products, let product = products.first, let price = product.formattedPrice {
+                        Spacer()
+                        Text("$\(price)")
+                            .font(.subheadline)
+                            .fontWeight(.bold)
+                    }
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color.blue, Color.purple]),
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .cornerRadius(10)
+            }
+        }
+        .padding(16)
+        .frame(width: 300)
+        .background(Color(.systemBackground))
+        .cornerRadius(16)
+        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+    }
+}
+

@@ -318,3 +318,56 @@ struct InstallmentStatisticsResponse: Codable {
     let statistics: InstallmentStatistics?
     let message: String?
 }
+
+// MARK: - Simple Installment Plan for UI
+// Simple InstallmentPlan struct for UI purposes
+struct SimpleInstallmentPlan: Identifiable {
+    let id: String
+    let planName: String
+    let duration: Int
+    let downPaymentPercentage: Double
+    let interestRate: Double
+    let minimumOrderAmount: Double
+    let processingFeePercentage: Double
+    let processingFeeFixed: Double?
+    let description: String?
+
+    func calculatePayments(orderAmount: Double) -> InstallmentCalculation {
+        let downPayment = (orderAmount * downPaymentPercentage) / 100
+        let remainingAmount = orderAmount - downPayment
+
+        // Calculate processing fee - use fixed fee if available, otherwise percentage
+        var processingFee = orderAmount * (processingFeePercentage / 100)
+        if let fixedFee = processingFeeFixed {
+            processingFee += fixedFee
+        }
+
+        // Calculate interest using frontend logic: annual rate / 12 months * duration
+        var totalWithInterest = remainingAmount
+        var totalInterest: Double = 0
+        if interestRate > 0 {
+            let monthlyRate = interestRate / 100 / 12
+            totalInterest = remainingAmount * monthlyRate * Double(duration)
+            totalWithInterest = remainingAmount + totalInterest
+        }
+
+        let monthlyPayment = totalWithInterest / Double(duration)
+        let totalAmount = downPayment + totalWithInterest + processingFee
+
+        return InstallmentCalculation(
+            downPayment: round(downPayment * 100) / 100,
+            monthlyPayment: round(monthlyPayment * 100) / 100,
+            totalAmount: round(totalAmount * 100) / 100,
+            totalInterest: round(totalInterest * 100) / 100,
+            processingFee: round(processingFee * 100) / 100
+        )
+    }
+}
+
+struct InstallmentCalculation {
+    let downPayment: Double
+    let monthlyPayment: Double
+    let totalAmount: Double
+    let totalInterest: Double
+    let processingFee: Double
+}

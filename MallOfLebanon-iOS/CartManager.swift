@@ -6,8 +6,11 @@ class CartManager: ObservableObject {
 
     @Published var items: [CartItem] = []
     @Published var cartSummary: CartSummary = CartSummary(items: [])
+    @Published var shippingCost: Double = 0.0
+    @Published var isCalculatingShipping: Bool = false
 
     private let userDefaults = UserDefaults.standard
+    private let apiService = APIService.shared
     private let cartStorageKey = "my_ecom_cart_v1"
     private var cancellables = Set<AnyCancellable>()
 
@@ -30,6 +33,16 @@ class CartManager: ObservableObject {
         $items
             .sink { [weak self] items in
                 self?.saveCart()
+            }
+            .store(in: &cancellables)
+
+        // Calculate shipping whenever items change
+        $items
+            .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    await self?.calculateShipping()
+                }
             }
             .store(in: &cancellables)
     }
@@ -107,8 +120,11 @@ class CartManager: ObservableObject {
             sellerName: currentItem.sellerName,
             customizations: currentItem.customizations,
             maxStock: currentItem.maxStock,
+            taxRate: currentItem.taxRate,
             installmentPlan: installmentPlan,
-            hasInstallmentPlan: installmentPlan != nil
+            hasInstallmentPlan: installmentPlan != nil,
+            isRaffleTicket: currentItem.isRaffleTicket,
+            raffleInfo: currentItem.raffleInfo
         )
 
         items[index] = updatedItem
@@ -140,8 +156,18 @@ class CartManager: ObservableObject {
             sellerName: cartProduct.product.sellerName,
             customizations: customizations,
             maxStock: cartProduct.product.stockCount,
+            taxRate: cartProduct.product.taxRate,
             installmentPlan: nil,
-            hasInstallmentPlan: false
+            hasInstallmentPlan: false,
+            isRaffleTicket: cartProduct.product.isRaffleTicket ?? false,
+            raffleInfo: cartProduct.product.raffleInfo.map { info in
+                RaffleInfo(
+                    raffleId: info.raffleId,
+                    raffleTitle: info.raffleTitle,
+                    ticketsPerPurchase: info.ticketsPerPurchase,
+                    drawDate: info.drawDate
+                )
+            }
         )
 
         // Check if item with same configuration already exists
@@ -273,6 +299,58 @@ class CartManager: ObservableObject {
         items = items.filter { item in
             return !item.name.isEmpty && item.price > 0 && item.quantity > 0
         }
+    }
+
+    // MARK: - Shipping Calculation
+
+    @MainActor
+    func calculateShipping() async {
+        guard !items.isEmpty else {
+            shippingCost = 0.0
+            return
+        }
+
+        isCalculatingShipping = true
+
+        do {
+            let shippingItems = items.map { item in
+                ShippingItem(
+                    sellerId: item.sellerId,
+                    sellerName: item.sellerName,
+                    price: item.price,
+                    quantity: item.quantity
+                )
+            }
+
+            let shippingRequest = ShippingCalculationRequest(items: shippingItems)
+            let response = try await apiService.calculateShippingAsync(shippingRequest)
+
+            if response.success {
+                shippingCost = response.totalShipping
+                print("📦 [DEBUG] Calculated shipping cost: $\(shippingCost)")
+            } else {
+                print("⚠️ [DEBUG] Shipping calculation failed, using fallback cost")
+                shippingCost = 5.0 // Fallback to $5 if calculation fails
+            }
+        } catch {
+            print("❌ [DEBUG] Error calculating shipping: \(error)")
+            shippingCost = 5.0 // Fallback to $5 on error
+        }
+
+        isCalculatingShipping = false
+    }
+
+    func getShippingCost(for deliveryMethod: DeliveryMethod) -> Double {
+        switch deliveryMethod {
+        case .storePickup:
+            return 0.0
+        case .homeDelivery:
+            return shippingCost
+        }
+    }
+
+    var totalWithShipping: Double {
+        return subtotal + shippingCost
     }
 
     // MARK: - Checkout Helpers

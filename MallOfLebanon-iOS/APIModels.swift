@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 // MARK: - API Response Models
 struct APIResponse<T: Codable>: Codable {
@@ -767,9 +768,16 @@ struct OrderSummary: Codable {
     let total: Double
     let itemCount: Int
 
-    init(items: [CartItem], deliveryMethod: DeliveryMethod, giftCardDiscount: Double = 0) {
+    init(items: [CartItem], deliveryMethod: DeliveryMethod, giftCardDiscount: Double = 0, dynamicShippingCost: Double? = nil) {
         self.subtotal = items.reduce(0) { $0 + $1.total }
-        self.deliveryFee = deliveryMethod.fee
+
+        // Use dynamic shipping cost if provided, otherwise fall back to hardcoded fee
+        if let dynamicCost = dynamicShippingCost {
+            self.deliveryFee = deliveryMethod == .storePickup ? 0.0 : dynamicCost
+        } else {
+            self.deliveryFee = deliveryMethod.fee
+        }
+
         self.giftCardDiscount = giftCardDiscount
         self.total = max(0, subtotal + deliveryFee - giftCardDiscount)
         self.itemCount = items.reduce(0) { $0 + $1.quantity }
@@ -826,6 +834,120 @@ enum APIError: Error, LocalizedError {
 
 // Note: ProductSearchParams moved to ProductModels.swift
 // Note: ProductSortOption moved to ProductModels.swift
+
+// MARK: - Raffle API Models
+struct RaffleShowcaseResponse: Codable {
+    let success: Bool
+    let raffles: [APIRaffle]
+    let message: String?
+    let count: Int?
+}
+
+struct APIRaffle: Codable, Identifiable {
+    let id: String
+    let title: String
+    let description: String
+    let prizeImage: String?
+    let prizeValue: Double?
+    let prizeCurrency: String?
+    let maxTickets: Int?
+    let currentTickets: Int?
+    let drawDate: String?
+    let isActive: Bool?
+    let createdAt: String?
+    let updatedAt: String?
+    let daysLeft: Int?
+    let percentageSold: Int?
+    private let _timeLeftText: String?
+    private let _progressText: String?
+    let formattedPrizeValue: String?
+    let productCount: Int?
+    let products: [APIRaffleProduct]?
+
+    // Computed property to generate time left text from daysLeft
+    var timeLeftText: String? {
+        guard let daysLeft = daysLeft else {
+            return nil
+        }
+
+        if daysLeft <= 0 {
+            return "Ending Soon!"
+        } else if daysLeft == 1 {
+            return "1 Day Left!"
+        } else {
+            return "\(daysLeft) Days Left!"
+        }
+    }
+
+    // Computed property to generate progress text from currentTickets and maxTickets
+    var progressText: String? {
+        guard let currentTickets = currentTickets, let maxTickets = maxTickets else {
+            return nil
+        }
+        return "\(currentTickets) / \(maxTickets)"
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id = "_id"
+        case title, description, prizeImage, prizeValue, prizeCurrency
+        case maxTickets, currentTickets, drawDate, isActive
+        case createdAt, updatedAt, daysLeft, percentageSold
+        case _timeLeftText = "timeLeftText", _progressText = "progressText", formattedPrizeValue
+        case productCount, products
+    }
+}
+
+struct APIRaffleProduct: Codable, Identifiable {
+    let id: String  // This will be the actual product ID (e.g., "prod_1767440715522_escriiqe3")
+    let mongoId: String?  // This will be the MongoDB ObjectId (e.g., "6959014bb9da3c167cd98adb")
+    let name: String
+    let price: Double?
+    let mainImage: String?
+    let formattedPrice: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"  // Use the actual product ID field
+        case mongoId = "_id"  // MongoDB ObjectId
+        case name, price, mainImage, formattedPrice
+    }
+}
+
+// MARK: - Product Search Response
+struct ProductSearchResponse: Codable {
+    let success: Bool
+    let products: [Product]?
+    let message: String?
+    let totalProducts: Int?
+    let page: Int?
+    let totalPages: Int?
+}
+
+// MARK: - Shipping Calculation Models
+struct ShippingCalculationRequest: Codable {
+    let items: [ShippingItem]
+}
+
+struct ShippingItem: Codable {
+    let sellerId: String
+    let sellerName: String
+    let price: Double
+    let quantity: Int
+}
+
+struct ShippingCalculationResponse: Codable {
+    let success: Bool
+    let message: String?
+    let shippingBreakdown: [ShippingBreakdown]?
+    let totalShipping: Double
+}
+
+struct ShippingBreakdown: Codable {
+    let sellerId: String
+    let sellerName: String
+    let shippingCost: Double
+    let freeShippingThreshold: Double?
+    let orderTotal: Double
+}
 
 // MARK: - Extensions
 extension String {

@@ -4,7 +4,7 @@ import Combine
 class APIService: ObservableObject {
     static let shared = APIService()
 
-    private let baseURL = "http://172.30.0.167:3007/api"
+    private let baseURL = "http://192.168.43.61:3007/api"
     private let session: URLSession
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
@@ -257,32 +257,19 @@ class APIService: ObservableObject {
         var components = URLComponents(string: "\(baseURL)/products/public")!
         var queryItems: [URLQueryItem] = []
 
-        print("\n🏗️ ===== BUILDING PRODUCTS API REQUEST =====\n")
-        print("📋 Input Parameters:")
-        print("   - Base URL: \(baseURL)/products/public")
-        print("   - Category: \(parameters.category ?? "nil")")
-        print("   - Subcategory: \(parameters.subcategory ?? "nil")")
-        print("   - Search: \(parameters.search ?? "nil")")
-        print("   - Page: \(parameters.page)")
-        print("   - Limit: \(parameters.limit)")
-        print("   - Sort By: \(parameters.sortBy.rawValue)")
-
         queryItems = parameters.toQueryItems()
-        print("\n🔧 Generated Query Items:")
-        for (index, item) in queryItems.enumerated() {
-            print("   [\(index + 1)] \(item.name) = \(item.value ?? "nil")")
-        }
 
         components.queryItems = queryItems.isEmpty ? nil : queryItems
 
         guard let url = components.url else {
-            print("❌ Failed to construct URL from components")
             return Fail(error: APIError.serverError( "Invalid URL"))
                 .eraseToAnyPublisher()
         }
 
-        print("\n🌐 FINAL REQUEST URL: \(url.absoluteString)")
-        print("\n🚀 About to send HTTP request...")
+        // Debug: Log the exact URL being requested
+        print("🌐 API Request URL: \(url.absoluteString)")
+        print("🔍 Query Parameters: \(queryItems)")
+        print("📦 Search Params - Category: \(parameters.category ?? "nil"), Page: \(parameters.page), Limit: \(parameters.limit)")
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
@@ -290,61 +277,10 @@ class APIService: ObservableObject {
 
         return session.dataTaskPublisher(for: request)
             .tryMap { data, response -> Data in
-                print("\n📡 ===== HTTP RESPONSE RECEIVED =====\n")
-
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    print("❌ Invalid HTTP response type")
+                guard let httpResponse = response as? HTTPURLResponse,
+                      200...299 ~= httpResponse.statusCode else {
                     throw APIError.serverError( "Request failed")
                 }
-
-                print("📊 HTTP Response Details:")
-                print("   - Status Code: \(httpResponse.statusCode)")
-                print("   - Headers: \(httpResponse.allHeaderFields)")
-                print("   - Data Size: \(data.count) bytes")
-
-                guard 200...299 ~= httpResponse.statusCode else {
-                    print("❌ HTTP Error - Status Code: \(httpResponse.statusCode)")
-                    if let errorData = String(data: data, encoding: .utf8) {
-                        print("   Error Response: \(errorData)")
-                    }
-                    throw APIError.serverError( "Request failed")
-                }
-
-                print("✅ HTTP Status OK (\(httpResponse.statusCode))")
-
-                // Debug: Log raw response for products endpoint
-                if let rawResponse = String(data: data, encoding: .utf8) {
-                    print("\n🔍 API Raw Response for ProductsResponse:")
-                    print("\(rawResponse.prefix(1000))...")
-
-                    // Try to parse as JSON to check structure
-                    do {
-                        if let jsonObject = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                            print("\n📋 Response JSON Structure:")
-                            for key in jsonObject.keys.sorted() {
-                                print("   - \(key): \(type(of: jsonObject[key]))")
-                            }
-
-                            if let success = jsonObject["success"] as? Bool {
-                                print("   - success: \(success)")
-                            }
-
-                            if let products = jsonObject["products"] as? [[String: Any]] {
-                                print("   - products count: \(products.count)")
-                            }
-
-                            if let pagination = jsonObject["pagination"] as? [String: Any] {
-                                print("   - pagination: \(pagination)")
-                            }
-                        }
-                    } catch {
-                        print("⚠️ Could not parse response as JSON: \(error)")
-                    }
-                } else {
-                    print("❌ Could not convert response data to string")
-                }
-
-                print("\n===== END HTTP RESPONSE PROCESSING =====\n")
                 return data
             }
             .decode(type: ProductsResponse.self, decoder: decoder)
@@ -487,34 +423,6 @@ class APIService: ObservableObject {
                 return APIError.serverError( error.localizedDescription)
             }
             .eraseToAnyPublisher()
-    }
-
-    // MARK: - Raffles
-    func getRaffles() -> AnyPublisher<RaffleShowcaseResponse, APIError> {
-        return performRequest(
-            endpoint: "/raffles/showcase",
-            method: .GET,
-            responseType: RaffleShowcaseResponse.self
-        )
-    }
-
-    func fetchRafflesAsync() async throws -> RaffleShowcaseResponse {
-        return try await withCheckedThrowingContinuation { continuation in
-            var cancellable: AnyCancellable?
-
-            cancellable = getRaffles()
-                .sink(receiveCompletion: { completion in
-                    switch completion {
-                    case .finished:
-                        break
-                    case .failure(let error):
-                        continuation.resume(throwing: error)
-                    }
-                    cancellable?.cancel()
-                }, receiveValue: { response in
-                    continuation.resume(returning: response)
-                })
-        }
     }
 
     // MARK: - Orders
@@ -787,20 +695,6 @@ class APIService: ObservableObject {
             body: body,
             responseType: DocumentUploadResponse.self,
             additionalHeaders: ["Content-Type": "multipart/form-data; boundary=\(boundary)"]
-        )
-    }
-
-    func calculateShippingAsync(_ shippingRequest: ShippingCalculationRequest) async throws -> ShippingCalculationResponse {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-
-        let requestBody = try encoder.encode(shippingRequest)
-
-        return try await performRequestAsync(
-            endpoint: "/shipping/calculate",
-            method: HTTPMethod.POST,
-            body: requestBody,
-            responseType: ShippingCalculationResponse.self
         )
     }
 

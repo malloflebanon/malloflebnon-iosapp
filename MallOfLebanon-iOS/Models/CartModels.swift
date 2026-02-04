@@ -1,5 +1,20 @@
 import Foundation
 
+// MARK: - Raffle Info
+struct RaffleInfo: Codable, Equatable {
+    let raffleId: String?
+    let raffleTitle: String?
+    let ticketsPerPurchase: Int
+    let drawDate: String?
+
+    init(raffleId: String?, raffleTitle: String? = nil, ticketsPerPurchase: Int = 1, drawDate: String? = nil) {
+        self.raffleId = raffleId
+        self.raffleTitle = raffleTitle
+        self.ticketsPerPurchase = ticketsPerPurchase
+        self.drawDate = drawDate
+    }
+}
+
 // MARK: - Installment Plan Selection
 struct InstallmentPlanSelection: Codable, Equatable {
     let planId: String
@@ -72,10 +87,15 @@ struct CartItem: Codable, Identifiable {
     let sellerName: String
     let customizations: [CustomizationSelection]?
     let maxStock: Int
+    let taxRate: Double? // Tax rate for this product (e.g. 11.0 for 11%)
 
     // Installment support
     let installmentPlan: InstallmentPlanSelection?
     let hasInstallmentPlan: Bool
+
+    // Raffle support
+    let isRaffleTicket: Bool
+    let raffleInfo: RaffleInfo?
 
     var total: Double {
         return price * Double(quantity)
@@ -98,6 +118,30 @@ struct CartItem: Codable, Identifiable {
     var discountPercentage: Int {
         guard let original = originalPrice, original > price else { return 0 }
         return Int(((original - price) / original) * 100)
+    }
+
+    // Raffle-related computed properties
+    var displayName: String {
+        if isRaffleTicket {
+            return "\(name) (Raffle Entry)"
+        }
+        return name
+    }
+
+    var ticketCount: Int {
+        if isRaffleTicket {
+            let ticketsPerPurchase = raffleInfo?.ticketsPerPurchase ?? 1
+            return quantity * ticketsPerPurchase
+        }
+        return 0
+    }
+
+    var raffleDisplayText: String {
+        if isRaffleTicket {
+            let tickets = ticketCount
+            return tickets == 1 ? "1 Raffle Ticket" : "\(tickets) Raffle Tickets"
+        }
+        return ""
     }
 
     mutating func increaseQuantity() {
@@ -312,8 +356,18 @@ extension CartItem {
             sellerName: product.sellerName,
             customizations: customizations,
             maxStock: product.stockCount,
+            taxRate: product.taxRate,
             installmentPlan: installmentPlan,
-            hasInstallmentPlan: installmentPlan != nil
+            hasInstallmentPlan: installmentPlan != nil,
+            isRaffleTicket: product.isRaffleTicket ?? false,
+            raffleInfo: product.raffleInfo.map { info in
+                RaffleInfo(
+                    raffleId: info.raffleId,
+                    raffleTitle: info.raffleTitle,
+                    ticketsPerPurchase: info.ticketsPerPurchase,
+                    drawDate: info.drawDate
+                )
+            }
         )
     }
 }

@@ -357,6 +357,17 @@ struct SimpleInstallmentPlan: Identifiable {
         let monthlyPayment = totalWithInterest / Double(duration)
         let totalAmount = downPayment + totalWithInterest + processingFee
 
+        // Debug logging for calculation
+        print("💰 [Calculation Debug] \(planName) for $\(orderAmount)")
+        print("  Down Payment: \(downPaymentPercentage)% = $\(downPayment)")
+        print("  Remaining: $\(remainingAmount)")
+        print("  Interest Rate: \(interestRate)% annually")
+        print("  Monthly Rate: \(interestRate / 100 / 12)")
+        print("  Total Interest: $\(totalInterest)")
+        print("  Processing Fee: $\(processingFee)")
+        print("  Monthly Payment: $\(monthlyPayment)")
+        print("  TOTAL AMOUNT: $\(totalAmount)")
+
         return InstallmentCalculation(
             downPayment: round(downPayment * 100) / 100,
             monthlyPayment: round(monthlyPayment * 100) / 100,

@@ -649,6 +649,12 @@ struct InstallmentPlansSection: View {
                 } else if let intValue = planDict["processingFee"] as? Int {
                     return Double(intValue)
                 }
+                // Also try processingFeeFixed field for compatibility
+                if let doubleValue = planDict["processingFeeFixed"] as? Double {
+                    return doubleValue
+                } else if let intValue = planDict["processingFeeFixed"] as? Int {
+                    return Double(intValue)
+                }
                 return nil
             }()
 

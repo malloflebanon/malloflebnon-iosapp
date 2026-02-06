@@ -129,8 +129,23 @@ struct InstallmentPlansView: View {
                 } else if let intValue = planDict["processingFee"] as? Int {
                     return Double(intValue)
                 }
+                // Also try processingFeeFixed field for compatibility
+                if let doubleValue = planDict["processingFeeFixed"] as? Double {
+                    return doubleValue
+                } else if let intValue = planDict["processingFeeFixed"] as? Int {
+                    return Double(intValue)
+                }
                 return nil
             }()
+
+            // Debug logging for installment plan data
+            print("🛠️ [InstallmentPlan Debug] Plan: \(planName)")
+            print("  Duration: \(duration) months")
+            print("  Down Payment %: \(downPaymentPercentage)%")
+            print("  Interest Rate: \(interestRate)%")
+            print("  Processing Fee Fixed: \(processingFeeFixed ?? 0)")
+            print("  Processing Fee %: \(processingFeePercentage)%")
+            print("  For Product Price: $\(calculatedPrice)")
 
             return SimpleInstallmentPlan(
                 id: id,

@@ -317,6 +317,9 @@ struct HomeView: View {
             ScrollView {
                 LazyVStack(spacing: 16) {
 
+                    // Auction Section - positioned above raffles
+                    AuctionSection()
+
                     // Raffle Section - positioned at the top
                     RaffleSection()
 

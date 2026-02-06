@@ -472,7 +472,24 @@ struct Product: Codable, Identifiable {
 
     // Simple computed property to access raw installment plans data
     var installmentPlans: [[String: Any]]? {
-        return installmentPlansRaw?.compactMap { $0.value as? [String: Any] }
+        let plans = installmentPlansRaw?.compactMap { $0.value as? [String: Any] }
+
+        // Debug logging for raw installment data
+        if let plans = plans {
+            print("📋 [Product] Raw Installment Plans Data:")
+            for (index, plan) in plans.enumerated() {
+                print("  Plan \(index + 1):")
+                for (key, value) in plan {
+                    print("    \(key): \(value)")
+                }
+                print("  ---")
+            }
+        } else {
+            print("📋 [Product] No installment plans found in raw data")
+            print("📋 [Product] installmentPlansRaw: \(installmentPlansRaw?.description ?? "nil")")
+        }
+
+        return plans
     }
 
 }

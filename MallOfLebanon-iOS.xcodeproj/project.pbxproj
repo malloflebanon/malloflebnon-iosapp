@@ -33,6 +33,9 @@
 		EABDBCD52EF1FE2900D9D66B /* CheckoutComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = EABDBCD32EF1FE2900D9D66B /* CheckoutComponents.swift */; };
 		EAF247332EFC0C390027BB44 /* OrdersViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAF247322EFC0C390027BB44 /* OrdersViewModel.swift */; };
 		EAF247362EFC0C700027BB44 /* OrdersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAF247342EFC0C700027BB44 /* OrdersView.swift */; };
+		A3DE27F3F69940598CA53BF7 /* AuctionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77C471C292314236AE70927F /* AuctionModels.swift */; };
+		B9BECCD1E97D4BFB8E44A81A /* AuctionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404E35B6FDB04B9B85767752 /* AuctionService.swift */; };
+		531F142895754358B10115C2 /* AuctionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 189BFEA3DBE849D58929AF99 /* AuctionViews.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -64,6 +67,9 @@
 		EABDBCD32EF1FE2900D9D66B /* CheckoutComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckoutComponents.swift; sourceTree = "<group>"; };
 		EAF247322EFC0C390027BB44 /* OrdersViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrdersViewModel.swift; sourceTree = "<group>"; };
 		EAF247342EFC0C700027BB44 /* OrdersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrdersView.swift; sourceTree = "<group>"; };
+		77C471C292314236AE70927F /* AuctionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuctionModels.swift; sourceTree = "<group>"; };
+		404E35B6FDB04B9B85767752 /* AuctionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuctionService.swift; sourceTree = "<group>"; };
+		189BFEA3DBE849D58929AF99 /* AuctionViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuctionViews.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -141,6 +147,7 @@
 		EA4454952EE49F7900AB485C /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				77C471C292314236AE70927F /* AuctionModels.swift */,
 				EABDBCC92EF1F42800D9D66B /* CartProductModels.swift */,
 				EA4454932EE49F7900AB485C /* CartModels.swift */,
 				EA4454942EE49F7900AB485C /* ProductModels.swift */,
@@ -165,6 +172,7 @@
 		EA44549A2EE49F7900AB485C /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				404E35B6FDB04B9B85767752 /* AuctionService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -223,6 +231,7 @@
 		EA4454A52EE49F7900AB485C /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				189BFEA3DBE849D58929AF99 /* AuctionViews.swift */,
 				EAF247352EFC0C700027BB44 /* Orders */,
 				EABDBCD42EF1FE2900D9D66B /* Checkout */,
 				EA4454A22EE49F7900AB485C /* Cart */,
@@ -341,6 +350,9 @@
 				EA4454B22EE49F7900AB485C /* CartView.swift in Sources */,
 				EA4454B32EE49F7900AB485C /* ProductListView.swift in Sources */,
 				EA4454B42EE49F7900AB485C /* KeychainManager.swift in Sources */,
+				A3DE27F3F69940598CA53BF7 /* AuctionModels.swift in Sources */,
+				B9BECCD1E97D4BFB8E44A81A /* AuctionService.swift in Sources */,
+				531F142895754358B10115C2 /* AuctionViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

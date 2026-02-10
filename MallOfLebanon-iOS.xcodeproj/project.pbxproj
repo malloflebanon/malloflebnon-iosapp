@@ -1,0 +1,571 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		EA4454A62EE49F7900AB485C /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA44549D2EE49F7900AB485C /* User.swift */; };
+		EA4454A72EE49F7900AB485C /* APIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA4454882EE49F7900AB485C /* APIModels.swift */; };
+		EA4454A82EE49F7900AB485C /* AuthenticationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA44548C2EE49F7900AB485C /* AuthenticationManager.swift */; };
+		EA4454A92EE49F7900AB485C /* RegisterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA4454982EE49F7900AB485C /* RegisterView.swift */; };
+		EA4454AA2EE49F7900AB485C /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA44548E2EE49F7900AB485C /* ContentView.swift */; };
+		EA4454AB2EE49F7900AB485C /* CartManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA44548D2EE49F7900AB485C /* CartManager.swift */; };
+		EA4454AC2EE49F7900AB485C /* ProductModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA4454942EE49F7900AB485C /* ProductModels.swift */; };
+		EA4454AD2EE49F7900AB485C /* ProductListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA44549F2EE49F7900AB485C /* ProductListViewModel.swift */; };
+		EA4454AE2EE49F7900AB485C /* CartModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA4454932EE49F7900AB485C /* CartModels.swift */; };
+		EA4454AF2EE49F7900AB485C /* MallOfLebanon_iOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA4454922EE49F7900AB485C /* MallOfLebanon_iOSApp.swift */; };
+		EA4454B02EE49F7900AB485C /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA4454912EE49F7900AB485C /* LoginView.swift */; };
+		EA4454B12EE49F7900AB485C /* APIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA4454892EE49F7900AB485C /* APIService.swift */; };
+		EA4454B22EE49F7900AB485C /* CartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA4454A12EE49F7900AB485C /* CartView.swift */; };
+		EA4454B32EE49F7900AB485C /* ProductListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA4454A32EE49F7900AB485C /* ProductListView.swift */; };
+		EA4454B42EE49F7900AB485C /* KeychainManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA4454902EE49F7900AB485C /* KeychainManager.swift */; };
+		EA4454B62EE49F7900AB485C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EA44548A2EE49F7900AB485C /* Assets.xcassets */; };
+		EA4454B72EE49F7900AB485C /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EA4454962EE49F7900AB485C /* Preview Assets.xcassets */; };
+		EABDBCC82EF1F3FC00D9D66B /* ProductDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EABDBCC72EF1F3FC00D9D66B /* ProductDetailViewModel.swift */; };
+		EABDBCCA2EF1F42800D9D66B /* CartProductModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EABDBCC92EF1F42800D9D66B /* CartProductModels.swift */; };
+		EABDBCCE2EF1F44700D9D66B /* ProductDetailComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = EABDBCCB2EF1F44700D9D66B /* ProductDetailComponents.swift */; };
+		EABDBCCF2EF1F44700D9D66B /* ProductImageViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = EABDBCCD2EF1F44700D9D66B /* ProductImageViewer.swift */; };
+		EABDBCD02EF1F44700D9D66B /* ProductDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EABDBCCC2EF1F44700D9D66B /* ProductDetailView.swift */; };
+		EABDBCD22EF1FE0C00D9D66B /* CheckoutViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EABDBCD12EF1FE0C00D9D66B /* CheckoutViewModel.swift */; };
+		EABDBCD52EF1FE2900D9D66B /* CheckoutComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = EABDBCD32EF1FE2900D9D66B /* CheckoutComponents.swift */; };
+		EAF247332EFC0C390027BB44 /* OrdersViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAF247322EFC0C390027BB44 /* OrdersViewModel.swift */; };
+		EAF247362EFC0C700027BB44 /* OrdersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAF247342EFC0C700027BB44 /* OrdersView.swift */; };
+		A3DE27F3F69940598CA53BF7 /* AuctionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77C471C292314236AE70927F /* AuctionModels.swift */; };
+		B9BECCD1E97D4BFB8E44A81A /* AuctionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404E35B6FDB04B9B85767752 /* AuctionService.swift */; };
+		531F142895754358B10115C2 /* AuctionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 189BFEA3DBE849D58929AF99 /* AuctionViews.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		E20001000000000000000000 /* MallOfLebanon-iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "MallOfLebanon-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		EA4454882EE49F7900AB485C /* APIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIModels.swift; sourceTree = "<group>"; };
+		EA4454892EE49F7900AB485C /* APIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIService.swift; sourceTree = "<group>"; };
+		EA44548A2EE49F7900AB485C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		EA44548C2EE49F7900AB485C /* AuthenticationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationManager.swift; sourceTree = "<group>"; };
+		EA44548D2EE49F7900AB485C /* CartManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CartManager.swift; sourceTree = "<group>"; };
+		EA44548E2EE49F7900AB485C /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		EA44548F2EE49F7900AB485C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		EA4454902EE49F7900AB485C /* KeychainManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainManager.swift; sourceTree = "<group>"; };
+		EA4454912EE49F7900AB485C /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		EA4454922EE49F7900AB485C /* MallOfLebanon_iOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MallOfLebanon_iOSApp.swift; sourceTree = "<group>"; };
+		EA4454932EE49F7900AB485C /* CartModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CartModels.swift; sourceTree = "<group>"; };
+		EA4454942EE49F7900AB485C /* ProductModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductModels.swift; sourceTree = "<group>"; };
+		EA4454962EE49F7900AB485C /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		EA4454982EE49F7900AB485C /* RegisterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RegisterView.swift; sourceTree = "<group>"; };
+		EA44549D2EE49F7900AB485C /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
+		EA44549F2EE49F7900AB485C /* ProductListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductListViewModel.swift; sourceTree = "<group>"; };
+		EA4454A12EE49F7900AB485C /* CartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CartView.swift; sourceTree = "<group>"; };
+		EA4454A32EE49F7900AB485C /* ProductListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductListView.swift; sourceTree = "<group>"; };
+		EABDBCC72EF1F3FC00D9D66B /* ProductDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductDetailViewModel.swift; sourceTree = "<group>"; };
+		EABDBCC92EF1F42800D9D66B /* CartProductModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CartProductModels.swift; sourceTree = "<group>"; };
+		EABDBCCB2EF1F44700D9D66B /* ProductDetailComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductDetailComponents.swift; sourceTree = "<group>"; };
+		EABDBCCC2EF1F44700D9D66B /* ProductDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductDetailView.swift; sourceTree = "<group>"; };
+		EABDBCCD2EF1F44700D9D66B /* ProductImageViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductImageViewer.swift; sourceTree = "<group>"; };
+		EABDBCD12EF1FE0C00D9D66B /* CheckoutViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckoutViewModel.swift; sourceTree = "<group>"; };
+		EABDBCD32EF1FE2900D9D66B /* CheckoutComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckoutComponents.swift; sourceTree = "<group>"; };
+		EAF247322EFC0C390027BB44 /* OrdersViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrdersViewModel.swift; sourceTree = "<group>"; };
+		EAF247342EFC0C700027BB44 /* OrdersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrdersView.swift; sourceTree = "<group>"; };
+		77C471C292314236AE70927F /* AuctionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuctionModels.swift; sourceTree = "<group>"; };
+		404E35B6FDB04B9B85767752 /* AuctionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuctionService.swift; sourceTree = "<group>"; };
+		189BFEA3DBE849D58929AF99 /* AuctionViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuctionViews.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		E19999990000000000000000 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		E19999980000000000000000 = {
+			isa = PBXGroup;
+			children = (
+				EA4454862EE49F1100AB485C /* MallOfLebanon-iOS */,
+				E20001010000000000000000 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		E20001010000000000000000 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				E20001000000000000000000 /* MallOfLebanon-iOS.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		EA4454862EE49F1100AB485C /* MallOfLebanon-iOS */ = {
+			isa = PBXGroup;
+			children = (
+				EA4454872EE49F7900AB485C /* Account */,
+				EA4454882EE49F7900AB485C /* APIModels.swift */,
+				EA4454892EE49F7900AB485C /* APIService.swift */,
+				EA44548A2EE49F7900AB485C /* Assets.xcassets */,
+				EA44548B2EE49F7900AB485C /* Authentication */,
+				EA44548C2EE49F7900AB485C /* AuthenticationManager.swift */,
+				EA44548D2EE49F7900AB485C /* CartManager.swift */,
+				EA44548E2EE49F7900AB485C /* ContentView.swift */,
+				EA44548F2EE49F7900AB485C /* Info.plist */,
+				EA4454902EE49F7900AB485C /* KeychainManager.swift */,
+				EA4454912EE49F7900AB485C /* LoginView.swift */,
+				EA4454922EE49F7900AB485C /* MallOfLebanon_iOSApp.swift */,
+				EA4454952EE49F7900AB485C /* Models */,
+				EA4454962EE49F7900AB485C /* Preview Assets.xcassets */,
+				EA4454972EE49F7900AB485C /* Preview Content */,
+				EA4454982EE49F7900AB485C /* RegisterView.swift */,
+				EA4454992EE49F7900AB485C /* Resources */,
+				EA44549A2EE49F7900AB485C /* Services */,
+				EA44549B2EE49F7900AB485C /* Shopping */,
+				EA44549C2EE49F7900AB485C /* Store */,
+				EA44549D2EE49F7900AB485C /* User.swift */,
+				EA44549E2EE49F7900AB485C /* Utilities */,
+				EA4454A02EE49F7900AB485C /* ViewModels */,
+				EA4454A52EE49F7900AB485C /* Views */,
+			);
+			path = "MallOfLebanon-iOS";
+			sourceTree = "<group>";
+		};
+		EA4454872EE49F7900AB485C /* Account */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Account;
+			sourceTree = "<group>";
+		};
+		EA44548B2EE49F7900AB485C /* Authentication */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Authentication;
+			sourceTree = "<group>";
+		};
+		EA4454952EE49F7900AB485C /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				77C471C292314236AE70927F /* AuctionModels.swift */,
+				EABDBCC92EF1F42800D9D66B /* CartProductModels.swift */,
+				EA4454932EE49F7900AB485C /* CartModels.swift */,
+				EA4454942EE49F7900AB485C /* ProductModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		EA4454972EE49F7900AB485C /* Preview Content */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		EA4454992EE49F7900AB485C /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		EA44549A2EE49F7900AB485C /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				404E35B6FDB04B9B85767752 /* AuctionService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		EA44549B2EE49F7900AB485C /* Shopping */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Shopping;
+			sourceTree = "<group>";
+		};
+		EA44549C2EE49F7900AB485C /* Store */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Store;
+			sourceTree = "<group>";
+		};
+		EA44549E2EE49F7900AB485C /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
+		EA4454A02EE49F7900AB485C /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				EAF247322EFC0C390027BB44 /* OrdersViewModel.swift */,
+				EABDBCD12EF1FE0C00D9D66B /* CheckoutViewModel.swift */,
+				EABDBCC72EF1F3FC00D9D66B /* ProductDetailViewModel.swift */,
+				EA44549F2EE49F7900AB485C /* ProductListViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		EA4454A22EE49F7900AB485C /* Cart */ = {
+			isa = PBXGroup;
+			children = (
+				EA4454A12EE49F7900AB485C /* CartView.swift */,
+			);
+			path = Cart;
+			sourceTree = "<group>";
+		};
+		EA4454A42EE49F7900AB485C /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				EABDBCCB2EF1F44700D9D66B /* ProductDetailComponents.swift */,
+				EABDBCCC2EF1F44700D9D66B /* ProductDetailView.swift */,
+				EABDBCCD2EF1F44700D9D66B /* ProductImageViewer.swift */,
+				EA4454A32EE49F7900AB485C /* ProductListView.swift */,
+			);
+			path = Products;
+			sourceTree = "<group>";
+		};
+		EA4454A52EE49F7900AB485C /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				189BFEA3DBE849D58929AF99 /* AuctionViews.swift */,
+				EAF247352EFC0C700027BB44 /* Orders */,
+				EABDBCD42EF1FE2900D9D66B /* Checkout */,
+				EA4454A22EE49F7900AB485C /* Cart */,
+				EA4454A42EE49F7900AB485C /* Products */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		EABDBCD42EF1FE2900D9D66B /* Checkout */ = {
+			isa = PBXGroup;
+			children = (
+				EABDBCD32EF1FE2900D9D66B /* CheckoutComponents.swift */,
+			);
+			path = Checkout;
+			sourceTree = "<group>";
+		};
+		EAF247352EFC0C700027BB44 /* Orders */ = {
+			isa = PBXGroup;
+			children = (
+				EAF247342EFC0C700027BB44 /* OrdersView.swift */,
+			);
+			path = Orders;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		E19999970000000000000000 /* MallOfLebanon-iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E19999960000000000000000 /* Build configuration list for PBXNativeTarget "MallOfLebanon-iOS" */;
+			buildPhases = (
+				E19999940000000000000000 /* Sources */,
+				E19999990000000000000000 /* Frameworks */,
+				E19999950000000000000000 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "MallOfLebanon-iOS";
+			productName = "MallOfLebanon-iOS";
+			productReference = E20001000000000000000000 /* MallOfLebanon-iOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E19999930000000000000000 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 2620;
+				TargetAttributes = {
+					E19999970000000000000000 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = E19999920000000000000000 /* Build configuration list for PBXProject "MallOfLebanon-iOS" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = E19999980000000000000000;
+			productRefGroup = E20001010000000000000000 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E19999970000000000000000 /* MallOfLebanon-iOS */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E19999950000000000000000 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EA4454B62EE49F7900AB485C /* Assets.xcassets in Resources */,
+				EA4454B72EE49F7900AB485C /* Preview Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		E19999940000000000000000 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EABDBCD22EF1FE0C00D9D66B /* CheckoutViewModel.swift in Sources */,
+				EA4454A62EE49F7900AB485C /* User.swift in Sources */,
+				EA4454A72EE49F7900AB485C /* APIModels.swift in Sources */,
+				EAF247332EFC0C390027BB44 /* OrdersViewModel.swift in Sources */,
+				EABDBCCE2EF1F44700D9D66B /* ProductDetailComponents.swift in Sources */,
+				EAF247362EFC0C700027BB44 /* OrdersView.swift in Sources */,
+				EABDBCCF2EF1F44700D9D66B /* ProductImageViewer.swift in Sources */,
+				EABDBCD02EF1F44700D9D66B /* ProductDetailView.swift in Sources */,
+				EA4454A82EE49F7900AB485C /* AuthenticationManager.swift in Sources */,
+				EA4454A92EE49F7900AB485C /* RegisterView.swift in Sources */,
+				EA4454AA2EE49F7900AB485C /* ContentView.swift in Sources */,
+				EA4454AB2EE49F7900AB485C /* CartManager.swift in Sources */,
+				EA4454AC2EE49F7900AB485C /* ProductModels.swift in Sources */,
+				EABDBCC82EF1F3FC00D9D66B /* ProductDetailViewModel.swift in Sources */,
+				EA4454AD2EE49F7900AB485C /* ProductListViewModel.swift in Sources */,
+				EA4454AE2EE49F7900AB485C /* CartModels.swift in Sources */,
+				EA4454AF2EE49F7900AB485C /* MallOfLebanon_iOSApp.swift in Sources */,
+				EABDBCD52EF1FE2900D9D66B /* CheckoutComponents.swift in Sources */,
+				EA4454B02EE49F7900AB485C /* LoginView.swift in Sources */,
+				EA4454B12EE49F7900AB485C /* APIService.swift in Sources */,
+				EABDBCCA2EF1F42800D9D66B /* CartProductModels.swift in Sources */,
+				EA4454B22EE49F7900AB485C /* CartView.swift in Sources */,
+				EA4454B32EE49F7900AB485C /* ProductListView.swift in Sources */,
+				EA4454B42EE49F7900AB485C /* KeychainManager.swift in Sources */,
+				A3DE27F3F69940598CA53BF7 /* AuctionModels.swift in Sources */,
+				B9BECCD1E97D4BFB8E44A81A /* AuctionService.swift in Sources */,
+				531F142895754358B10115C2 /* AuctionViews.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		E19999880000000000000000 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"MallOfLebanon-iOS/Preview Content\"";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "MallOfLebanon-iOS/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Mall Of Lebanon";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.malloflebanon.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		E19999890000000000000000 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"MallOfLebanon-iOS/Preview Content\"";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "MallOfLebanon-iOS/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Mall Of Lebanon";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.malloflebanon.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E19999900000000000000000 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = MF6TVBB49N;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		E19999910000000000000000 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = MF6TVBB49N;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		E19999920000000000000000 /* Build configuration list for PBXProject "MallOfLebanon-iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E19999910000000000000000 /* Debug */,
+				E19999900000000000000000 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E19999960000000000000000 /* Build configuration list for PBXNativeTarget "MallOfLebanon-iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E19999890000000000000000 /* Debug */,
+				E19999880000000000000000 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = E19999930000000000000000 /* Project object */;
+}

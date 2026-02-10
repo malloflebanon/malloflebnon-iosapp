@@ -1,0 +1,863 @@
+    import Foundation
+import Combine
+
+class APIService: ObservableObject {
+    static let shared = APIService()
+
+    private let baseURL = "http://192.168.43.61:3007/api"
+    private let session: URLSession
+    private let decoder = JSONDecoder()
+    private let encoder = JSONEncoder()
+
+    private init() {
+        // Configure URLSession with timeouts
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 30.0  // 30 seconds per request
+        config.timeoutIntervalForResource = 90.0 // 90 seconds total
+        config.waitsForConnectivity = true
+        self.session = URLSession(configuration: config)
+
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let dateString = try container.decode(String.self)
+
+            let formatter = ISO8601DateFormatter()
+            if let date = formatter.date(from: dateString) {
+                return date
+            }
+
+            let isoFormatter = DateFormatter()
+            isoFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSZ"
+            if let date = isoFormatter.date(from: dateString) {
+                return date
+            }
+
+            isoFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"
+            if let date = isoFormatter.date(from: dateString) {
+                return date
+            }
+
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date format: \(dateString)")
+        }
+        encoder.dateEncodingStrategy = .iso8601
+    }
+
+    // MARK: - Generic Request Method
+    private func performRequest<T: Codable>(
+        endpoint: String,
+        method: HTTPMethod = .GET,
+        body: Data? = nil,
+        responseType: T.Type,
+        maxRetries: Int = 3
+    ) -> AnyPublisher<T, APIError> {
+        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+            return Fail(error: APIError.serverError( "Invalid URL"))
+                .eraseToAnyPublisher()
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = method.rawValue
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        // Add authorization header if token exists
+        if let token = KeychainManager.shared.getToken() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        if let body = body {
+            request.httpBody = body
+        }
+
+        return session.dataTaskPublisher(for: request)
+            .retry(maxRetries)
+            .tryMap { data, response -> Data in
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw APIError.serverError( "Invalid response")
+                }
+
+                guard 200...299 ~= httpResponse.statusCode else {
+                    // Try to decode as a standard API response first
+                    if let errorData = try? self.decoder.decode(APIResponse<String>.self, from: data) {
+                        throw APIError.serverError(errorData.message)
+                    }
+
+                    // Try to decode as AuthResponse for authentication errors
+                    if let authErrorData = try? self.decoder.decode(AuthResponse.self, from: data) {
+                        throw APIError.serverError(authErrorData.message)
+                    }
+
+                    // Try to decode as a generic error response
+                    if let errorResponse = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any],
+                       let errorMessage = errorResponse["message"] as? String {
+                        throw APIError.serverError( errorMessage)
+                    }
+
+                    // Fallback to status code specific messages
+                    let fallbackMessage: String
+                    switch httpResponse.statusCode {
+                    case 400:
+                        fallbackMessage = "Invalid request. Please check your information and try again."
+                    case 401:
+                        fallbackMessage = "Authentication failed. Please check your credentials."
+                    case 403:
+                        fallbackMessage = "Access denied. You don't have permission to perform this action."
+                    case 404:
+                        fallbackMessage = "Service not found. Please try again later."
+                    case 409:
+                        fallbackMessage = "This email address is already registered. Please use a different email."
+                    case 500...599:
+                        fallbackMessage = "Server error. Please try again later."
+                    default:
+                        fallbackMessage = "Something went wrong. Please try again."
+                    }
+
+                    throw APIError.serverError( fallbackMessage)
+                }
+
+                // Debug: Log raw response data
+                if let responseString = String(data: data, encoding: .utf8) {
+                    print("🔍 API Raw Response for \(responseType): \(responseString.prefix(200))...")
+                }
+                return data
+            }
+            .decode(type: responseType.self, decoder: decoder)
+            .mapError { error in
+                if let apiError = error as? APIError {
+                    return apiError
+                }
+
+                // Enhanced error logging for decoding issues
+                if let decodingError = error as? DecodingError {
+                    switch decodingError {
+                    case .keyNotFound(let key, let context):
+                        print("❌ Missing key '\(key.stringValue)' for \(responseType)")
+                        print("   Coding path: \(context.codingPath.map { $0.stringValue }.joined(separator: " -> "))")
+                        print("   Context: \(context.debugDescription)")
+                        return APIError.serverError( "Missing required field: \(key.stringValue)")
+
+                    case .typeMismatch(let type, let context):
+                        print("❌ Type mismatch for \(type) in \(responseType)")
+                        print("   Coding path: \(context.codingPath.map { $0.stringValue }.joined(separator: " -> "))")
+                        print("   Context: \(context.debugDescription)")
+                        return APIError.serverError( "Data type mismatch for field: \(context.codingPath.last?.stringValue ?? "unknown")")
+
+                    case .valueNotFound(let type, let context):
+                        print("❌ Value not found for \(type) in \(responseType)")
+                        print("   Coding path: \(context.codingPath.map { $0.stringValue }.joined(separator: " -> "))")
+                        print("   Context: \(context.debugDescription)")
+                        return APIError.serverError( "Missing value for field: \(context.codingPath.last?.stringValue ?? "unknown")")
+
+                    case .dataCorrupted(let context):
+                        print("❌ Data corrupted for \(responseType)")
+                        print("   Coding path: \(context.codingPath.map { $0.stringValue }.joined(separator: " -> "))")
+                        print("   Context: \(context.debugDescription)")
+                        return APIError.serverError( "Corrupted data for field: \(context.codingPath.last?.stringValue ?? "unknown")")
+
+                    @unknown default:
+                        print("❌ Unknown decoding error for \(responseType): \(decodingError)")
+                        return APIError.serverError( "Unknown parsing error")
+                    }
+                }
+
+                print("❌ General Error for \(responseType): \(error.localizedDescription)")
+                return APIError.serverError( error.localizedDescription)
+            }
+            .eraseToAnyPublisher()
+    }
+
+    // MARK: - Authentication
+    func login(email: String, password: String) -> AnyPublisher<AuthResponse, APIError> {
+        let loginRequest = LoginRequest(email: email, password: password)
+        guard let body = try? encoder.encode(loginRequest) else {
+            return Fail(error: APIError.serverError( "Failed to encode login request"))
+                .eraseToAnyPublisher()
+        }
+
+        return performRequest(
+            endpoint: "/auth/login",
+            method: .POST,
+            body: body,
+            responseType: AuthResponse.self
+        )
+    }
+
+    func register(
+        email: String,
+        password: String,
+        firstName: String,
+        lastName: String,
+        role: UserRole = .buyer
+    ) -> AnyPublisher<AuthResponse, APIError> {
+        let registerRequest = RegisterRequest(
+            email: email,
+            password: password,
+            firstName: firstName,
+            lastName: lastName,
+            role: role
+        )
+
+        guard let body = try? encoder.encode(registerRequest) else {
+            return Fail(error: APIError.serverError( "Failed to encode registration request"))
+                .eraseToAnyPublisher()
+        }
+
+        return performRequest(
+            endpoint: "/auth/register",
+            method: .POST,
+            body: body,
+            responseType: AuthResponse.self
+        )
+    }
+
+    func logout() -> AnyPublisher<APIResponse<String>, APIError> {
+        return performRequest(
+            endpoint: "/auth/logout",
+            method: .POST,
+            responseType: APIResponse<String>.self
+        )
+    }
+
+    func getProfile() -> AnyPublisher<APIResponse<User>, APIError> {
+        return performRequest(
+            endpoint: "/users/profile",
+            method: .GET,
+            responseType: APIResponse<User>.self
+        )
+    }
+
+    // MARK: - Categories
+    func getCategories() -> AnyPublisher<CategoriesResponse, APIError> {
+        return performRequest(
+            endpoint: "/categories",
+            method: .GET,
+            responseType: CategoriesResponse.self
+        )
+    }
+
+    // MARK: - Collections
+    func getCollections() -> AnyPublisher<CollectionsResponse, APIError> {
+        return performRequest(
+            endpoint: "/collections",
+            method: .GET,
+            responseType: CollectionsResponse.self
+        )
+    }
+
+    // MARK: - Homepage Sections
+    func getHomepageSections() -> AnyPublisher<HomepageSectionsResponse, APIError> {
+        return performRequest(
+            endpoint: "/homepage-sections",
+            method: .GET,
+            responseType: HomepageSectionsResponse.self
+        )
+    }
+
+    // MARK: - Products
+    func getProducts(parameters: ProductSearchParams = ProductSearchParams()) -> AnyPublisher<ProductsResponse, APIError> {
+        var components = URLComponents(string: "\(baseURL)/products/public")!
+        var queryItems: [URLQueryItem] = []
+
+        print("\n🏗️ ===== BUILDING PRODUCTS API REQUEST =====\n")
+        print("📋 Input Parameters:")
+        print("   - Base URL: \(baseURL)/products/public")
+        print("   - Category: \(parameters.category ?? "nil")")
+        print("   - Subcategory: \(parameters.subcategory ?? "nil")")
+        print("   - Search: \(parameters.search ?? "nil")")
+        print("   - Page: \(parameters.page)")
+        print("   - Limit: \(parameters.limit)")
+        print("   - Sort By: \(parameters.sortBy.rawValue)")
+
+        queryItems = parameters.toQueryItems()
+        print("\n🔧 Generated Query Items:")
+        for (index, item) in queryItems.enumerated() {
+            print("   [\(index + 1)] \(item.name) = \(item.value ?? "nil")")
+        }
+
+        components.queryItems = queryItems.isEmpty ? nil : queryItems
+
+        guard let url = components.url else {
+            print("❌ Failed to construct URL from components")
+            return Fail(error: APIError.serverError( "Invalid URL"))
+                .eraseToAnyPublisher()
+        }
+
+        print("\n🌐 FINAL REQUEST URL: \(url.absoluteString)")
+        print("\n🚀 About to send HTTP request...")
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        return session.dataTaskPublisher(for: request)
+            .tryMap { data, response -> Data in
+                print("\n📡 ===== HTTP RESPONSE RECEIVED =====\n")
+
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    print("❌ Invalid HTTP response type")
+                    throw APIError.serverError( "Request failed")
+                }
+
+                print("📊 HTTP Response Details:")
+                print("   - Status Code: \(httpResponse.statusCode)")
+                print("   - Headers: \(httpResponse.allHeaderFields)")
+                print("   - Data Size: \(data.count) bytes")
+
+                guard 200...299 ~= httpResponse.statusCode else {
+                    print("❌ HTTP Error - Status Code: \(httpResponse.statusCode)")
+                    if let errorData = String(data: data, encoding: .utf8) {
+                        print("   Error Response: \(errorData)")
+                    }
+                    throw APIError.serverError( "Request failed")
+                }
+
+                print("✅ HTTP Status OK (\(httpResponse.statusCode))")
+
+                // Debug: Log raw response for products endpoint
+                if let rawResponse = String(data: data, encoding: .utf8) {
+                    print("\n🔍 API Raw Response for ProductsResponse:")
+                    print("\(rawResponse.prefix(1000))...")
+
+                    // Try to parse as JSON to check structure
+                    do {
+                        if let jsonObject = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                            print("\n📋 Response JSON Structure:")
+                            for key in jsonObject.keys.sorted() {
+                                print("   - \(key): \(type(of: jsonObject[key]))")
+                            }
+
+                            if let success = jsonObject["success"] as? Bool {
+                                print("   - success: \(success)")
+                            }
+
+                            if let products = jsonObject["products"] as? [[String: Any]] {
+                                print("   - products count: \(products.count)")
+                            }
+
+                            if let pagination = jsonObject["pagination"] as? [String: Any] {
+                                print("   - pagination: \(pagination)")
+                            }
+                        }
+                    } catch {
+                        print("⚠️ Could not parse response as JSON: \(error)")
+                    }
+                } else {
+                    print("❌ Could not convert response data to string")
+                }
+
+                print("\n===== END HTTP RESPONSE PROCESSING =====\n")
+                return data
+            }
+            .decode(type: ProductsResponse.self, decoder: decoder)
+            .mapError { error in
+                if let apiError = error as? APIError {
+                    return apiError
+                }
+                return APIError.serverError( error.localizedDescription)
+            }
+            .eraseToAnyPublisher()
+    }
+
+    func getProduct(id: String) -> AnyPublisher<ProductResponse, APIError> {
+        NSLog("🌐 [MallOfLebanon] API: Fetching product with ID: \(id)")
+        NSLog("🌐 [MallOfLebanon] API: URL will be: \(baseURL)/products/\(id)")
+
+        return performRequest(
+            endpoint: "/products/\(id)",
+            method: .GET,
+            responseType: ProductResponse.self
+        )
+    }
+
+    func getFeaturedProducts() -> AnyPublisher<ProductsResponse, APIError> {
+        return performRequest(
+            endpoint: "/products/featured",
+            method: .GET,
+            responseType: ProductsResponse.self
+        )
+    }
+
+    // MARK: - Reviews
+    func submitReview(
+        productId: String,
+        sellerId: String,
+        rating: Int,
+        comment: String,
+        orderId: String? = nil
+    ) -> AnyPublisher<APIResponse<Review>, APIError> {
+        let reviewData: [String: Any] = [
+            "productId": productId,
+            "sellerId": sellerId,
+            "rating": rating,
+            "comment": comment,
+            "orderId": orderId as Any
+        ]
+
+        guard let body = try? JSONSerialization.data(withJSONObject: reviewData) else {
+            return Fail(error: APIError.serverError( "Failed to encode review data"))
+                .eraseToAnyPublisher()
+        }
+
+        return performRequest(
+            endpoint: "/reviews",
+            method: .POST,
+            body: body,
+            responseType: APIResponse<Review>.self
+        )
+    }
+
+    func getProductReviews(productId: String) -> AnyPublisher<APIResponse<[Review]>, APIError> {
+        return performRequest(
+            endpoint: "/reviews/product/\(productId)",
+            method: .GET,
+            responseType: APIResponse<[Review]>.self
+        )
+    }
+
+    // MARK: - Gift Cards
+    func validateGiftCard(code: String) -> AnyPublisher<GiftCardValidationResponse, APIError> {
+        let request = GiftCardValidationRequest(code: code)
+        guard let body = try? encoder.encode(request) else {
+            return Fail(error: APIError.serverError( "Failed to encode gift card request"))
+                .eraseToAnyPublisher()
+        }
+
+        return performRequest(
+            endpoint: "/giftcards/validate",
+            method: .POST,
+            body: body,
+            responseType: GiftCardValidationResponse.self
+        )
+    }
+
+    // MARK: - Branches
+    func getBranches() -> AnyPublisher<BranchesResponse, APIError> {
+        return performRequest(
+            endpoint: "/branches/public",
+            method: .GET,
+            responseType: BranchesResponse.self
+        )
+    }
+
+    func getBranchById(id: String) -> AnyPublisher<APIResponse<Branch>, APIError> {
+        return performRequest(
+            endpoint: "/branches/\(id)",
+            method: .GET,
+            responseType: APIResponse<Branch>.self
+        )
+    }
+
+    func getBranchesByVendor(vendorId: String) -> AnyPublisher<BranchesResponse, APIError> {
+        return performRequest(
+            endpoint: "/branches/vendor/\(vendorId)",
+            method: .GET,
+            responseType: BranchesResponse.self
+        )
+    }
+
+    func getNearbyBranches(latitude: Double, longitude: Double, radius: Double = 10.0) -> AnyPublisher<BranchesResponse, APIError> {
+        var components = URLComponents(string: "\(baseURL)/branches/nearby")!
+        components.queryItems = [
+            URLQueryItem(name: "latitude", value: "\(latitude)"),
+            URLQueryItem(name: "longitude", value: "\(longitude)"),
+            URLQueryItem(name: "radius", value: "\(radius)")
+        ]
+
+        guard let url = components.url else {
+            return Fail(error: APIError.serverError( "Invalid URL for nearby branches"))
+                .eraseToAnyPublisher()
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        return session.dataTaskPublisher(for: request)
+            .tryMap { data, response -> Data in
+                guard let httpResponse = response as? HTTPURLResponse,
+                      200...299 ~= httpResponse.statusCode else {
+                    throw APIError.serverError( "Request failed")
+                }
+                return data
+            }
+            .decode(type: BranchesResponse.self, decoder: decoder)
+            .mapError { error in
+                if let apiError = error as? APIError {
+                    return apiError
+                }
+                return APIError.serverError( error.localizedDescription)
+            }
+            .eraseToAnyPublisher()
+    }
+
+    // MARK: - Raffles
+    func getRaffles() -> AnyPublisher<RaffleShowcaseResponse, APIError> {
+        return performRequest(
+            endpoint: "/raffles/showcase",
+            method: .GET,
+            responseType: RaffleShowcaseResponse.self
+        )
+    }
+
+    func fetchRafflesAsync() async throws -> RaffleShowcaseResponse {
+        return try await withCheckedThrowingContinuation { continuation in
+            var cancellable: AnyCancellable?
+
+            cancellable = getRaffles()
+                .sink(receiveCompletion: { completion in
+                    switch completion {
+                    case .finished:
+                        break
+                    case .failure(let error):
+                        continuation.resume(throwing: error)
+                    }
+                    cancellable?.cancel()
+                }, receiveValue: { response in
+                    continuation.resume(returning: response)
+                })
+        }
+    }
+
+    // MARK: - Orders
+    func createOrder(_ orderRequest: CreateOrderRequest) -> AnyPublisher<CreateOrderResponse, APIError> {
+        guard let body = try? encoder.encode(orderRequest) else {
+            return Fail(error: APIError.serverError( "Failed to encode order request"))
+                .eraseToAnyPublisher()
+        }
+
+        return performRequest(
+            endpoint: "/orders",
+            method: .POST,
+            body: body,
+            responseType: CreateOrderResponse.self
+        )
+    }
+
+    func getOrders() -> AnyPublisher<OrdersResponse, APIError> {
+        guard let url = URL(string: baseURL + "/orders") else {
+            return Fail(error: APIError.serverError( "Invalid URL"))
+                .eraseToAnyPublisher()
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        // Add authentication token if available
+        if let token = KeychainManager.shared.getToken() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        return URLSession.shared.dataTaskPublisher(for: request)
+            .tryMap { [weak self] data, response in
+                // Debug: Print raw JSON response for orders
+                if let jsonString = String(data: data, encoding: .utf8) {
+                    print("🔍 [DEBUG] Raw Orders API Response:")
+                    print(jsonString)
+                }
+
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw APIError.serverError( "Invalid response")
+                }
+
+                guard 200...299 ~= httpResponse.statusCode else {
+                    if let errorMessage = String(data: data, encoding: .utf8) {
+                        print("❌ HTTP Error \(httpResponse.statusCode): \(errorMessage)")
+                    }
+                    throw APIError.serverError( "HTTP \(httpResponse.statusCode)")
+                }
+
+                return data
+            }
+            .decode(type: OrdersResponse.self, decoder: self.decoder)
+            .mapError { error in
+                if let decodingError = error as? DecodingError {
+                    print("❌ Decoding error for Orders: \(decodingError)")
+                }
+                return APIError.serverError( error.localizedDescription)
+            }
+            .eraseToAnyPublisher()
+    }
+
+    func getOrder(id: String) -> AnyPublisher<APIResponse<Order>, APIError> {
+        return performRequest(
+            endpoint: "/orders/\(id)",
+            method: .GET,
+            responseType: APIResponse<Order>.self
+        )
+    }
+
+    // MARK: - Async versions for modern Swift
+    func fetchProduct(id: String) async throws -> ProductResponse {
+        return try await withCheckedThrowingContinuation { continuation in
+            var cancellable: AnyCancellable?
+
+            cancellable = getProduct(id: id)
+                .sink(receiveCompletion: { completion in
+                    switch completion {
+                    case .finished:
+                        break // Success case handled in receiveValue
+                    case .failure(let error):
+                        continuation.resume(throwing: error)
+                    }
+                    cancellable?.cancel()
+                }, receiveValue: { response in
+                    continuation.resume(returning: response)
+                })
+        }
+    }
+
+    func validateGiftCardAsync(code: String) async throws -> GiftCardValidationResponse {
+        return try await withCheckedThrowingContinuation { continuation in
+            var cancellable: AnyCancellable?
+
+            cancellable = validateGiftCard(code: code)
+                .sink(receiveCompletion: { completion in
+                    switch completion {
+                    case .finished:
+                        break
+                    case .failure(let error):
+                        continuation.resume(throwing: error)
+                    }
+                    cancellable?.cancel()
+                }, receiveValue: { response in
+                    continuation.resume(returning: response)
+                })
+        }
+    }
+
+    func createOrderAsync(_ orderRequest: CreateOrderRequest) async throws -> CreateOrderResponse {
+        return try await withCheckedThrowingContinuation { continuation in
+            var cancellable: AnyCancellable?
+
+            cancellable = createOrder(orderRequest)
+                .sink(receiveCompletion: { completion in
+                    switch completion {
+                    case .finished:
+                        break
+                    case .failure(let error):
+                        continuation.resume(throwing: error)
+                    }
+                    cancellable?.cancel()
+                }, receiveValue: { response in
+                    continuation.resume(returning: response)
+                })
+        }
+    }
+
+    // MARK: - Installment Order Methods
+
+    func createInstallmentOrderAsync(_ orderRequest: CreateInstallmentOrderRequest, deliveryMethod: DeliveryMethod = .storePickup, shippingAddress: ShippingAddressRequest? = nil, userId: String? = nil) async throws -> InstallmentOrderResponse {
+        print("🚀 [DEBUG] Creating installment order with request: \(orderRequest)")
+
+        // Transform iOS request to match backend /orders endpoint format
+        let clientRef = "iOS-\(Date().timeIntervalSince1970)-\(Int.random(in: 1000...9999))"
+
+        let customerDict: [String: Any] = [
+            "name": orderRequest.customer.name,
+            "email": orderRequest.customer.email,
+            "phone": orderRequest.customer.phone ?? ""
+        ]
+
+        // Create a single item from the installment request
+        let itemDict: [String: Any] = [
+            "productId": orderRequest.productId,
+            "title": orderRequest.productName,
+            "vendorId": orderRequest.sellerId,
+            "quantity": orderRequest.quantity,
+            "unitPriceCents": Int(orderRequest.unitPrice * 100),
+            "sku": orderRequest.productSku,
+            "customizations": []
+        ]
+
+        let totalCents = Int(orderRequest.totalPrice * 100)
+
+        // Create installment plan from request
+        let installmentPlanDict: [String: Any] = [
+            "productId": orderRequest.productId,
+            "planId": orderRequest.planId,
+            "planName": orderRequest.planName,
+            "duration": 12, // Default duration - adjust as needed
+            "downPaymentAmount": Int(orderRequest.downPaymentAmount * 100),
+            "monthlyPaymentAmount": Int(orderRequest.monthlyAmount * 100),
+            "totalAmount": Int(orderRequest.totalAmount * 100)
+        ]
+
+        // Convert delivery method to backend format
+        let backendDeliveryMethod = deliveryMethod == .homeDelivery ? "delivery" : "pickup"
+
+        // Create uploaded documents structure with minimum required (1 document)
+        let uploadedDocuments: [String: [[String: Any]]] = [
+            orderRequest.sellerId: [
+                [
+                    "name": "national_id.pdf",
+                    "type": "application/pdf",
+                    "size": 1024000,
+                    "data": "data:application/pdf;base64,simulated-document-data"
+                ]
+            ]
+        ]
+
+        var orderData: [String: Any] = [
+            "clientOrderRef": clientRef,
+            "userId": userId ?? "guest_user", // Use authenticated user ID
+            "customer": customerDict,
+            "deliveryMethod": backendDeliveryMethod,
+            "items": [itemDict],
+            "shippingCents": 0,
+            "taxCents": 0,
+            "totalCents": totalCents,
+            "paymentMethod": "installment",
+            "isInstallmentOrder": true,
+            "installmentPlans": [installmentPlanDict],
+            "uploadedDocuments": uploadedDocuments
+        ]
+
+        // Add shipping address if provided (for home delivery)
+        if let shippingAddress = shippingAddress {
+            orderData["shippingAddress"] = [
+                "country": shippingAddress.country,
+                "city": shippingAddress.city,
+                "street": shippingAddress.street,
+                "postcode": shippingAddress.postcode ?? "",
+                "notes": shippingAddress.notes ?? ""
+            ]
+        }
+
+        print("📤 [DEBUG] Sending transformed order data to /orders endpoint")
+        print("📋 [DEBUG] Order data: \(orderData)")
+
+        let body = try JSONSerialization.data(withJSONObject: orderData)
+
+        // Call /orders endpoint instead of /installment-orders
+        let orderResponse = try await performRequestAsync(
+            endpoint: "/orders",
+            method: .POST,
+            body: body,
+            responseType: OrderResponse.self
+        )
+
+        print("✅ [DEBUG] Order creation response: \(orderResponse)")
+
+        // Transform OrderResponse to InstallmentOrderResponse
+        // Use the orderId from the response as the installment order ID
+        let installmentOrderId = orderResponse.orderId ?? orderResponse.order?.id ?? "inst_\(UUID().uuidString.prefix(8))"
+
+        let installmentResponse = InstallmentOrderResponse(
+            success: orderResponse.success,
+            message: orderResponse.message,
+            installmentOrderId: installmentOrderId,
+            orderNumber: orderResponse.order?.orderNumber,
+            order: orderResponse.order
+        )
+
+        print("🔄 [DEBUG] Transformed to installment response: \(installmentResponse)")
+
+        return installmentResponse
+    }
+
+    func uploadDocumentsAsync(_ uploadRequest: DocumentUploadRequest) async throws -> DocumentUploadResponse {
+        // Create multipart form data
+        let boundary = UUID().uuidString
+        var body = Data()
+
+        // Add installment order ID
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"installmentOrderId\"\r\n\r\n".data(using: .utf8)!)
+        body.append("\(uploadRequest.installmentOrderId)\r\n".data(using: .utf8)!)
+
+        // Add each document
+        for (index, document) in uploadRequest.documents.enumerated() {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"documents\"; filename=\"\(document.fileName)\"\r\n".data(using: .utf8)!)
+            body.append("Content-Type: \(document.mimeType)\r\n\r\n".data(using: .utf8)!)
+            body.append(document.file)
+            body.append("\r\n".data(using: .utf8)!)
+
+            // Add document type
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"documentTypes[\(index)]\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(document.documentType)\r\n".data(using: .utf8)!)
+        }
+
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+
+        return try await performRequestAsync(
+            endpoint: "/installment-orders/upload-documents",
+            method: .POST,
+            body: body,
+            responseType: DocumentUploadResponse.self,
+            additionalHeaders: ["Content-Type": "multipart/form-data; boundary=\(boundary)"]
+        )
+    }
+
+    // MARK: - Private Helper for Async Requests with Headers
+
+    private func performRequestAsync<T: Codable>(
+        endpoint: String,
+        method: HTTPMethod = .GET,
+        body: Data? = nil,
+        responseType: T.Type,
+        additionalHeaders: [String: String] = [:]
+    ) async throws -> T {
+        guard let url = URL(string: baseURL + endpoint) else {
+            throw URLError(.badURL)
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = method.rawValue
+        request.httpBody = body
+
+        // Set default headers
+        if method != .GET {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        // Add additional headers (will override defaults if same key)
+        for (key, value) in additionalHeaders {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+
+        // Add authentication if available
+        if let token = UserDefaults.standard.string(forKey: "auth_token") {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (data, response) = try await session.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+
+        guard 200...299 ~= httpResponse.statusCode else {
+            if let errorData = try? decoder.decode(ErrorResponse.self, from: data) {
+                throw APIError.serverError(errorData.message)
+            }
+            throw URLError(.badServerResponse)
+        }
+
+        // Add debug logging for response data
+        if let responseString = String(data: data, encoding: .utf8) {
+            print("📥 [DEBUG] Raw response data: \(responseString)")
+        }
+
+        do {
+            return try decoder.decode(T.self, from: data)
+        } catch {
+            print("❌ [DEBUG] JSON decoding error: \(error)")
+            if let decodingError = error as? DecodingError {
+                print("❌ [DEBUG] Detailed decoding error: \(decodingError)")
+            }
+            throw error
+        }
+    }
+}
+
+// MARK: - HTTP Method
+enum HTTPMethod: String {
+    case GET = "GET"
+    case POST = "POST"
+    case PUT = "PUT"
+    case DELETE = "DELETE"
+    case PATCH = "PATCH"
+}

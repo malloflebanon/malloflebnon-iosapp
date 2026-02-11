@@ -2773,6 +2773,7 @@ struct LiveAuctionPageView: View {
     // Real-time Updates
     @State private var viewerCount = 0
     @State private var connectionStatus = "Connecting..."
+    @State private var isMinimized = false
 
     var body: some View {
         ZStack {
@@ -2903,6 +2904,23 @@ struct LiveAuctionPageView: View {
                     Text("\(viewerCount)")
                         .font(.caption)
                         .fontWeight(.medium)
+
+                    // Down arrow button for minimize
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            isMinimized.toggle()
+                        }
+                        print("📱 Down arrow tapped - isMinimized: \(isMinimized)")
+                    }) {
+                        Image(systemName: isMinimized ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 20, height: 20)
+                            .background(
+                                Circle()
+                                    .fill(Color.black.opacity(0.3))
+                            )
+                    }
                 }
             }
             .foregroundColor(.white)
@@ -2913,6 +2931,9 @@ struct LiveAuctionPageView: View {
 
     private func bottomControlsBar(_ auction: LiveAuction) -> some View {
         VStack(spacing: 16) {
+            // Auction Item Display
+            auctionItemDisplay(auction)
+
             // Current item info (if available)
             if let item = currentItem {
                 currentItemFloatingBanner(item)
@@ -2920,6 +2941,98 @@ struct LiveAuctionPageView: View {
 
             // Action buttons removed as requested (items, chat, bid)
         }
+    }
+
+    // MARK: - Auction Item Display
+    private func auctionItemDisplay(_ auction: LiveAuction) -> some View {
+        VStack(spacing: 12) {
+            // Main item info row
+            HStack(spacing: 16) {
+                // Left side - Item image
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.yellow.opacity(0.9))
+                    .frame(width: 80, height: 80)
+                    .overlay(
+                        Text("XS")
+                            .font(Font.title.weight(.bold))
+                            .foregroundColor(.black)
+                    )
+
+                // Middle - Item details
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("XS-XSMALL PULL #191")
+                        .font(Font.headline.weight(.semibold))
+                        .foregroundColor(.white)
+
+                    Text("Open-box")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.8))
+
+                    HStack(spacing: 4) {
+                        Text("🇱🇧")
+                        Text("US$38.24 Int Shipping + Taxes")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.9))
+                    }
+                }
+
+                Spacer()
+
+                // Right side - Price and timer
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("US$2")
+                        .font(Font.title2.weight(.bold))
+                        .foregroundColor(.white)
+
+                    HStack(spacing: 4) {
+                        Text("💀")
+                        Text("00:01")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
+                }
+            }
+
+            // Bottom buttons row
+            HStack(spacing: 12) {
+                // Custom button
+                Button(action: {
+                    print("🎛️ Custom button tapped")
+                }) {
+                    Text("Custom")
+                        .font(Font.headline.weight(.medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(Color.black.opacity(0.7))
+                        .cornerRadius(25)
+                }
+
+                // Bid button
+                Button(action: {
+                    print("💰 Bid button tapped")
+                }) {
+                    HStack {
+                        Text("Bid: US$3")
+                        Image(systemName: "chevron.right.2")
+                    }
+                    .font(Font.headline.weight(.semibold))
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.yellow)
+                    .cornerRadius(25)
+                }
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.black.opacity(0.8))
+        )
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
     }
 
     private func currentItemFloatingBanner(_ item: AuctionItem) -> some View {

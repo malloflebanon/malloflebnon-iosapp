@@ -156,9 +156,10 @@ struct WebRTCVideoView: View {
                 Spacer()
             }
 
-            // Right-side controls positioned in middle-right
+            // Right-side controls positioned in lower-middle-right
             VStack {
                 Spacer()
+                Spacer() // Extra spacer to push controls further down
                 HStack {
                     Spacer()
                     rightSideControlsInline
@@ -555,11 +556,6 @@ struct WebRTCVideoView: View {
             }
         }
         .padding(8)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.black.opacity(0.6))
-                .blur(radius: 4)
-        )
     }
 
     // MARK: - Viewer Controls Header (Inline)

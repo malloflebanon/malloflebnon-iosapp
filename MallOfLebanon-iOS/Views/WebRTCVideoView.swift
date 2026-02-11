@@ -32,7 +32,6 @@ struct WebRTCVideoView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea(.all)
-        .background(Color.black)
         .onAppear {
             print("🎬 [WebRTCVideoView] ========== VIEW APPEARED ==========")
             print("🎬 [WebRTCVideoView] Auction ID: \(auctionId)")
@@ -73,7 +72,7 @@ struct WebRTCVideoView: View {
         VStack(spacing: 20) {
             // Video placeholder
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color.black)
+                .fill(Color.gray.opacity(0.3))
                 .aspectRatio(16/9, contentMode: .fit)
                 .overlay(
                     VStack(spacing: 16) {
@@ -159,18 +158,19 @@ struct WebRTCVideoView: View {
             // Right-side controls positioned in lower-middle-right
             VStack {
                 Spacer()
-                Spacer() // Extra spacer to push controls further down
+                Spacer()
+                Spacer() // Push controls even further down
                 HStack {
                     Spacer()
                     rightSideControlsInline
                         .padding(.trailing, 20)
                 }
                 Spacer()
+                Spacer() // Add bottom spacer for better positioning
             }
 
             // Quality menu overlay removed
         }
-        .background(Color.black)
         .ignoresSafeArea(.all)
         .clipped()
     }
@@ -180,9 +180,6 @@ struct WebRTCVideoView: View {
     private var remoteVideoView: some View {
         GeometryReader { geometry in
             ZStack {
-                Color.black
-                    .ignoresSafeArea(.all)
-
                 // WebRTC Remote Video Renderer with custom sizing (19:20:10:80)
                 WebRTCVideoRenderer(videoTrack: webRTCService.remoteVideoTrack, isLocal: false)
                     .frame(
@@ -193,7 +190,6 @@ struct WebRTCVideoView: View {
                         x: 20 + (geometry.size.width - 20 - 80) / 2,  // Center in available width
                         y: 19 + (geometry.size.height - 19 - 10) / 2   // Center in available height
                     )
-                    .background(Color.black)
 
                 // Live Frame Fallback with custom sizing (19:20:10:80)
                 if let liveFrame = webRTCService.currentLiveFrame {
@@ -209,7 +205,6 @@ struct WebRTCVideoView: View {
                             y: 19 + (geometry.size.height - 19 - 10) / 2
                         )
                         .clipped()
-                        .background(Color.black)
                         .overlay(
                             VStack {
                                 Spacer()
@@ -327,7 +322,7 @@ struct WebRTCVideoView: View {
             }
         }
         .padding()
-        .background(Color.black.opacity(0.8))
+        .background(Color.clear)
         .cornerRadius(12)
         .frame(maxWidth: 250)
         .position(x: 200, y: 150)
@@ -359,7 +354,7 @@ struct WebRTCVideoView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
-        .background(Color.black.opacity(0.6))
+        .background(Color.clear)
         .cornerRadius(8)
     }
 
@@ -414,7 +409,7 @@ struct WebRTCVideoView: View {
             }
         }
         .padding(8)
-        .background(Color.black.opacity(0.6))
+        .background(Color.clear)
         .cornerRadius(8)
         .padding()
     }
@@ -703,7 +698,7 @@ struct WebRTCVideoRenderer: UIViewRepresentable {
         // Custom sizing configuration (19:20:10:80)
         videoView.videoContentMode = .scaleAspectFill
         videoView.clipsToBounds = true
-        videoView.backgroundColor = UIColor.black
+        videoView.backgroundColor = UIColor.clear
         videoView.contentMode = .scaleAspectFill
 
         // Custom constraints for 19:20:10:80 sizing

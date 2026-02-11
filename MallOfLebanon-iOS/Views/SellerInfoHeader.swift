@@ -147,12 +147,12 @@ struct SellerInfoHeader: View {
             Text("Follow")
                 .font(.caption)
                 .fontWeight(.semibold)
-                .foregroundColor(.black)
+                .foregroundColor(.white)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.yellow)
+                        .fill(Color.orange)
                 )
         }
     }

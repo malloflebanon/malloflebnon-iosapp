@@ -2869,16 +2869,21 @@ struct LiveAuctionPageView: View {
 
     // MARK: - Floating Controls Overlay
     private func floatingControlsOverlay(_ auction: LiveAuction) -> some View {
-        VStack {
+        VStack(spacing: 0) {
             // Top controls
-            topControlsBar(auction)
+            HStack {
+                topControlsBar(auction)
+            }
+            .padding(.horizontal)
+            .padding(.top)
 
             Spacer()
 
-            // Bottom controls
-            bottomControlsBar(auction)
+            // Bottom auction display - pushed to absolute bottom
+            VStack(spacing: 0) {
+                bottomControlsBar(auction)
+            }
         }
-        .padding()
     }
 
     private func topControlsBar(_ auction: LiveAuction) -> some View {
@@ -2945,70 +2950,83 @@ struct LiveAuctionPageView: View {
 
     // MARK: - Auction Item Display
     private func auctionItemDisplay(_ auction: LiveAuction) -> some View {
-        VStack(spacing: 12) {
-            // Main item info row
-            HStack(spacing: 16) {
-                // Left side - Item image
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.yellow.opacity(0.9))
-                    .frame(width: 80, height: 80)
-                    .overlay(
-                        Text("XS")
-                            .font(Font.title.weight(.bold))
-                            .foregroundColor(.black)
-                    )
+        VStack(spacing: 0) {
+            // Main item info row - Two sections layout
+            HStack(spacing: 0) {
+                // LEFT SECTION - Image + Title + Shipping (at beginning of screen)
+                HStack(alignment: .top, spacing: 12) {
+                    // Smaller item image - real product image
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(width: 50, height: 50)
+                        .overlay(
+                            Image(systemName: "shippingbox.fill")
+                                .font(.title2)
+                                .foregroundColor(.white.opacity(0.8))
+                        )
 
-                // Middle - Item details
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("XS-XSMALL PULL #191")
-                        .font(Font.headline.weight(.semibold))
-                        .foregroundColor(.white)
+                    // Item details column
+                    VStack(alignment: .leading, spacing: 2) {
+                        // Item name at top aligned with image
+                        Text("XS-XSMALL PULL #191")
+                            .font(Font.subheadline.weight(.semibold))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
 
-                    Text("Open-box")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.8))
-
-                    HStack(spacing: 4) {
-                        Text("🇱🇧")
-                        Text("US$38.24 Int Shipping + Taxes")
+                        // Open-box below name
+                        Text("Open-box")
                             .font(.caption)
-                            .foregroundColor(.white.opacity(0.9))
+                            .foregroundColor(.white.opacity(0.8))
+
+                        // Shipping on same line as flag
+                        HStack(spacing: 4) {
+                            Text("🇱🇧")
+                            Text("US$38.24 Int Shipping + Taxes")
+                                .font(.caption2)
+                                .foregroundColor(.white.opacity(0.9))
+                                .lineLimit(1)
+                        }
                     }
                 }
 
                 Spacer()
 
-                // Right side - Price and timer
-                VStack(alignment: .trailing, spacing: 4) {
+                // RIGHT SECTION - Price and timer (not overlapping)
+                VStack(alignment: .trailing, spacing: 2) {
                     Text("US$2")
-                        .font(Font.title2.weight(.bold))
+                        .font(Font.title3.weight(.bold))
                         .foregroundColor(.white)
 
-                    HStack(spacing: 4) {
+                    HStack(spacing: 2) {
                         Text("💀")
                         Text("00:01")
-                            .font(.caption)
+                            .font(.caption2)
                             .foregroundColor(.red)
                     }
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
 
             // Bottom buttons row
             HStack(spacing: 12) {
-                // Custom button
+                // Custom button - with white border
                 Button(action: {
                     print("🎛️ Custom button tapped")
                 }) {
                     Text("Custom")
-                        .font(Font.headline.weight(.medium))
+                        .font(Font.subheadline.weight(.medium))
                         .foregroundColor(.white)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .background(Color.black.opacity(0.7))
-                        .cornerRadius(25)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.clear)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(Color.white, lineWidth: 1)
+                        )
                 }
 
-                // Bid button
+                // Bid button - orange background
                 Button(action: {
                     print("💰 Bid button tapped")
                 }) {
@@ -3016,23 +3034,25 @@ struct LiveAuctionPageView: View {
                         Text("Bid: US$3")
                         Image(systemName: "chevron.right.2")
                     }
-                    .font(Font.headline.weight(.semibold))
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
+                    .font(Font.subheadline.weight(.semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
                     .frame(maxWidth: .infinity)
-                    .background(Color.yellow)
-                    .cornerRadius(25)
+                    .background(Color.orange)
+                    .cornerRadius(20)
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+            .padding(.top, 8)
         }
-        .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: 12)
                 .fill(Color.black.opacity(0.8))
         )
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
+        .padding(.horizontal, 8)
+        .padding(.bottom, 0)
     }
 
     private func currentItemFloatingBanner(_ item: AuctionItem) -> some View {

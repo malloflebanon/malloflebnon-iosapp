@@ -277,10 +277,6 @@ struct WebRTCVideoView: View {
             }
 
         }
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.white.opacity(0.3), lineWidth: 1)
-        )
     }
 
     // MARK: - Video Controls

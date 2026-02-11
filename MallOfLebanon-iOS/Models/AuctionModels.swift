@@ -259,6 +259,14 @@ struct AuctionDetailsResponse: Codable {
     let message: String?
 }
 
+struct AuctionDetailsArrayResponse: Codable {
+    let success: Bool
+    let auctions: [LiveAuction]?
+    let auction: LiveAuction?
+    let items: [AuctionItem]?
+    let message: String?
+}
+
 struct BidResponse: Codable {
     let success: Bool
     let message: String

@@ -2,8 +2,8 @@ import SwiftUI
 import Combine
 
 // MARK: - Live Auction Page
-// Complete auction experience combining live stream, bidding, chat, and timer
-// This replaces and enhances the existing AuctionDetailView
+// Full-screen live stream experience with floating overlays for items, chat, and bidding
+// Optimized for immersive auction viewing
 
 struct LiveAuctionPageView: View {
     let auctionId: String
@@ -20,50 +20,40 @@ struct LiveAuctionPageView: View {
     @State private var errorMessage: String?
     @State private var cancellables = Set<AnyCancellable>()
 
-    // UI State
-    @State private var selectedTab = 0
+    // UI State - Overlays (items and chat removed)
     @State private var showingBiddingSheet = false
     @State private var showingItemDetails = false
     @State private var selectedDetailItem: AuctionItem?
+    @State private var showingControls = true
+
+    // Right-side control sheet states
+    @State private var showingMoreSheet = false
+    @State private var showingShareSheet = false
+    @State private var showingWalletSheet = false
 
     // Real-time Updates
     @State private var viewerCount = 0
     @State private var connectionStatus = "Connecting..."
 
-    private let tabs = ["Stream", "Items", "Chat"]
-
     var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                if isLoading {
-                    loadingView
-                } else if let error = errorMessage {
-                    errorView(error)
-                } else if let auction = auction {
-                    auctionContent(auction)
-                }
-            }
-            .navigationTitle("Live Auction")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Close") {
-                        socketService.disconnect()
-                        presentationMode.wrappedValue.dismiss()
-                    }
-                }
+        ZStack {
+            // Full-screen background - completely black including status bar area
+            Color.black
+                .ignoresSafeArea(.all)
+                .edgesIgnoringSafeArea(.all)
 
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    if let item = currentItem, item.isActive {
-                        Button("Bid") {
-                            showingBiddingSheet = true
-                        }
-                        .foregroundColor(.blue)
-                        .fontWeight(.semibold)
-                    }
-                }
+            if isLoading {
+                loadingView
+            } else if let error = errorMessage {
+                errorView(error)
+            } else if let auction = auction {
+                fullScreenAuctionView(auction)
             }
         }
+        .ignoresSafeArea(.all)
+        .preferredColorScheme(.dark)
+        .statusBarHidden(true)
+        .navigationBarHidden(true)
         .onAppear {
             loadAuctionData()
             setupRealTimeUpdates()
@@ -81,6 +71,15 @@ struct LiveAuctionPageView: View {
                 ItemDetailSheet(item: item)
             }
         }
+        .sheet(isPresented: $showingMoreSheet) {
+            MoreOptionsSheet()
+        }
+        .sheet(isPresented: $showingShareSheet) {
+            ShareOptionsSheet(auctionId: auctionId, auctionTitle: auction?.title ?? "Live Auction")
+        }
+        .sheet(isPresented: $showingWalletSheet) {
+            WalletSheet()
+        }
     }
 
     // MARK: - View Components
@@ -89,9 +88,10 @@ struct LiveAuctionPageView: View {
         VStack(spacing: 16) {
             ProgressView()
                 .scaleEffect(1.5)
+                .tint(.white)
             Text("Loading auction...")
                 .font(.headline)
-                .foregroundColor(.secondary)
+                .foregroundColor(.white)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -104,10 +104,11 @@ struct LiveAuctionPageView: View {
 
             Text("Failed to Load Auction")
                 .font(.headline)
+                .foregroundColor(.white)
 
             Text(error)
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(.gray)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
 
@@ -123,77 +124,228 @@ struct LiveAuctionPageView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func auctionContent(_ auction: LiveAuction) -> some View {
-        VStack(spacing: 0) {
-            // Auction Header
-            auctionHeader(auction)
+    private func fullScreenAuctionView(_ auction: LiveAuction) -> some View {
+        ZStack {
+            // Full-screen live stream (background layer)
+            WebRTCLiveStreamView(
+                auctionId: auctionId,
+                auctionTitle: auction.title
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .ignoresSafeArea(.all)
+            .clipped()
 
-            // Timer (if active item)
-            if let item = currentItem, item.isActive {
-                AuctionTimerView(auction: auction, currentItem: item)
-                    .padding(.horizontal)
-                    .padding(.bottom, 12)
+            // Floating overlays (foreground layer)
+            if showingControls {
+                floatingControlsOverlay(auction)
             }
 
-            // Tab Navigation
-            tabSelector
-
-            // Tab Content
-            TabView(selection: $selectedTab) {
-                streamTabView
-                    .tag(0)
-
-                itemsTabView
-                    .tag(1)
-
-                chatTabView
-                    .tag(2)
+            // Right-side controls (separate overlay for better visibility)
+            if showingControls {
+                rightSideControls()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailingCenter)
+                    .allowsHitTesting(true)
+                    .zIndex(999)  // Ensure controls appear on top
+                    .padding(.trailing, 20)
+                    .onAppear {
+                        print("🎯 [DEBUG] Right-side controls overlay appeared in LiveAuctionPageView")
+                    }
             }
-            .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+
+            // Items and chat overlays removed as requested
         }
     }
 
-    private func auctionHeader(_ auction: LiveAuction) -> some View {
-        VStack(spacing: 12) {
-            // Title and Status
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(auction.title)
-                        .font(.headline)
-                        .fontWeight(.bold)
+    // MARK: - Floating Controls Overlay
+    private func floatingControlsOverlay(_ auction: LiveAuction) -> some View {
+        VStack {
+            // Top controls - match seller header alignment
+            topControlsBar(auction)
+                .padding(.top, 32)
 
-                    Text(auction.description)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
-                }
+            Spacer()
 
-                Spacer()
-
-                VStack(alignment: .trailing, spacing: 4) {
-                    statusBadge(auction.status)
-
-                    HStack(spacing: 4) {
-                        Image(systemName: "eye.fill")
-                            .foregroundColor(.green)
-                        Text("\(viewerCount)")
-                            .fontWeight(.medium)
-                    }
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                }
-            }
-
-            // Current Item Info (if available)
-            if let item = currentItem {
-                currentItemBanner(item)
-            }
+            // Bottom controls
+            bottomControlsBar(auction)
         }
         .padding()
-        .background(Color(.systemGray6))
     }
 
-    private func currentItemBanner(_ item: AuctionItem) -> some View {
+    private func topControlsBar(_ auction: LiveAuction) -> some View {
+        HStack {
+            // Close button removed as requested
+
+            Spacer()
+
+            // Viewer count and status
+            HStack(spacing: 8) {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(auction.status == .live ? Color.red : Color.blue)
+                        .frame(width: 8, height: 8)
+                    Text(auction.status.displayName)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .shadow(color: .black, radius: 1, x: 0, y: 0)
+                }
+
+                HStack(spacing: 4) {
+                    Image(systemName: "eye.fill")
+                        .font(.caption)
+                        .shadow(color: .black, radius: 1, x: 0, y: 0)
+                    Text("\(viewerCount)")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .shadow(color: .black, radius: 1, x: 0, y: 0)
+
+                    // Down arrow button
+                    Button(action: {
+                        // Action for down arrow (minimize/expand functionality)
+                        print("📱 Down arrow tapped")
+                    }) {
+                        Image(systemName: "chevron.down")
+                            .font(.caption)
+                            .foregroundColor(.white)
+                            .shadow(color: .black, radius: 1, x: 0, y: 0)
+                    }
+                }
+            }
+            .foregroundColor(.white)
+
+            Spacer()
+        }
+    }
+
+    private func bottomControlsBar(_ auction: LiveAuction) -> some View {
+        // All bottom icons removed as requested
+        EmptyView()
+    }
+
+    private func rightSideControls() -> some View {
+        VStack(spacing: 16) {
+            // More button
+            Button(action: {
+                print("📱 [DEBUG] More button tapped in LiveAuctionPageView")
+                showingMoreSheet = true
+            }) {
+                VStack(spacing: 4) {
+                    Image(systemName: "ellipsis")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+
+                    Text("More")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+                }
+                .padding(8)
+                .background(Color.black.opacity(0.5))
+                .cornerRadius(8)
+            }
+
+            // Clip button
+            Button(action: {
+                print("📹 [DEBUG] Clip button tapped in LiveAuctionPageView")
+            }) {
+                VStack(spacing: 4) {
+                    Image(systemName: "video.badge.plus")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+
+                    Text("Clip")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+                }
+                .padding(8)
+                .background(Color.black.opacity(0.5))
+                .cornerRadius(8)
+            }
+
+            // Share button
+            Button(action: {
+                print("📤 [DEBUG] Share button tapped in LiveAuctionPageView")
+                showingShareSheet = true
+            }) {
+                VStack(spacing: 4) {
+                    Image(systemName: "arrowshape.turn.up.right")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+
+                    Text("Share")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+                }
+                .padding(8)
+                .background(Color.black.opacity(0.5))
+                .cornerRadius(8)
+            }
+
+            // Wallet button
+            Button(action: {
+                print("💳 [DEBUG] Wallet button tapped in LiveAuctionPageView")
+                showingWalletSheet = true
+            }) {
+                VStack(spacing: 4) {
+                    Image(systemName: "wallet.pass")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+
+                    Text("Wallet")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+                }
+                .padding(8)
+                .background(Color.black.opacity(0.5))
+                .cornerRadius(8)
+            }
+
+            // Shop button
+            Button(action: {
+                print("🛒 [DEBUG] Shop button tapped in LiveAuctionPageView")
+            }) {
+                VStack(spacing: 4) {
+                    Image(systemName: "storefront")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+
+                    Text("Shop")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+                }
+                .padding(8)
+                .background(Color.black.opacity(0.5))
+                .cornerRadius(8)
+            }
+        }
+        .padding(.trailing, 16)
+        .padding(.vertical, 8)
+        .background(Color.clear)  // Clean transparent background
+        .cornerRadius(12)
+        .onAppear {
+            print("🎯 [DEBUG] Right-side controls appeared in LiveAuctionPageView with high-visibility styling")
+        }
+    }
+
+    private func currentItemFloatingBanner(_ item: AuctionItem) -> some View {
         HStack(spacing: 12) {
             // Item Thumbnail
             if let imageUrl = item.primaryImageURL {
@@ -201,7 +353,7 @@ struct LiveAuctionPageView: View {
                     url: URL(string: imageUrl),
                     placeholder: { ProgressView().scaleEffect(0.5) },
                     failureView: {
-                        RoundedRectangle(cornerRadius: 6)
+                        RoundedRectangle(cornerRadius: 8)
                             .fill(Color.gray.opacity(0.3))
                             .overlay(
                                 Image(systemName: "photo")
@@ -210,147 +362,108 @@ struct LiveAuctionPageView: View {
                     }
                 )
                 .aspectRatio(contentMode: .fill)
-                .frame(width: 60, height: 60)
+                .frame(width: 50, height: 50)
                 .clipped()
                 .cornerRadius(8)
             }
 
             // Item Info
             VStack(alignment: .leading, spacing: 4) {
-                Text("🔴 LIVE NOW")
-                    .font(.caption2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.red)
+                HStack {
+                    Text("🔴 LIVE")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.red)
+
+                    // Timer if available
+                    if let endTime = item.itemEndTime {
+                        AuctionTimerCompactView(endTime: endTime)
+                    }
+                }
 
                 Text(item.name)
                     .font(.subheadline)
                     .fontWeight(.semibold)
                     .lineLimit(1)
+                    .foregroundColor(.white)
 
                 HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Current Bid")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                        Text("$\(String(format: "%.0f", item.currentBid ?? item.startingPrice))")
-                            .font(.caption)
-                            .fontWeight(.bold)
-                            .foregroundColor(.green)
-                    }
+                    Text("Current: $\(String(format: "%.0f", item.currentBid ?? item.startingPrice))")
+                        .font(.caption)
+                        .foregroundColor(.green)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Next Bid")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                        Text("$\(String(format: "%.0f", item.nextMinimumBid))")
-                            .font(.caption)
-                            .fontWeight(.bold)
-                            .foregroundColor(.blue)
-                    }
+                    Text("Next: $\(String(format: "%.0f", item.nextMinimumBid))")
+                        .font(.caption)
+                        .foregroundColor(.blue)
                 }
             }
 
             Spacer()
-
-            // Quick Bid Button
-            Button(action: {
-                showingBiddingSheet = true
-            }) {
-                Image(systemName: "hammer.fill")
-                    .font(.title3)
-                    .foregroundColor(.white)
-                    .frame(width: 44, height: 44)
-                    .background(Color.blue)
-                    .cornerRadius(22)
-            }
         }
         .padding()
-        .background(Color(.systemBackground))
+        .background(Color.black.opacity(0.8))
         .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.red.opacity(0.6), lineWidth: 1)
+        )
     }
 
-    private var tabSelector: some View {
-        HStack(spacing: 0) {
-            ForEach(0..<tabs.count, id: \.self) { index in
-                Button(action: {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        selectedTab = index
-                    }
-                }) {
-                    VStack(spacing: 4) {
-                        Text(tabs[index])
-                            .font(.subheadline)
-                            .fontWeight(selectedTab == index ? .semibold : .medium)
+    // MARK: - Overlay Views
 
-                        if selectedTab == index {
-                            Rectangle()
-                                .fill(Color.blue)
-                                .frame(height: 2)
-                                .transition(.opacity)
-                        } else {
-                            Rectangle()
-                                .fill(Color.clear)
-                                .frame(height: 2)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .foregroundColor(selectedTab == index ? .blue : .secondary)
-                }
-            }
-        }
-        .padding(.horizontal)
-        .background(Color(.systemBackground))
-    }
+    // Items and chat overlay views removed as requested
 
-    private var streamTabView: some View {
-        VStack(spacing: 16) {
-            LiveStreamView(auctionId: auctionId)
-                .padding(.horizontal)
+    // MARK: - Helper Components
 
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemGroupedBackground))
-    }
+    struct AuctionTimerCompactView: View {
+        let endTime: String
+        @State private var timeRemaining: String = ""
+        @State private var timer: Timer?
 
-    private var itemsTabView: some View {
-        ScrollView {
-            LazyVStack(spacing: 12) {
-                ForEach(items) { item in
-                    AuctionItemRowView(item: item, isActive: item._id == currentItem?._id) {
-                        selectedDetailItem = item
-                        showingItemDetails = true
-                    } onBidTap: {
-                        if item.isActive {
-                            showingBiddingSheet = true
-                        }
-                    }
-                }
-            }
-            .padding()
-        }
-        .background(Color(.systemGroupedBackground))
-    }
-
-    private var chatTabView: some View {
-        AuctionChatView(auctionId: auctionId)
-            .background(Color(.systemGroupedBackground))
-    }
-
-    private func statusBadge(_ status: AuctionStatus) -> some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(status == .live ? Color.red : Color.blue)
-                .frame(width: 6, height: 6)
-            Text(status.displayName)
+        var body: some View {
+            Text(timeRemaining)
                 .font(.caption2)
-                .fontWeight(.bold)
+                .fontWeight(.medium)
+                .foregroundColor(.orange)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.orange.opacity(0.2))
+                .cornerRadius(4)
+                .onAppear {
+                    startTimer()
+                }
+                .onDisappear {
+                    timer?.invalidate()
+                }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Color.black.opacity(0.1))
-        .cornerRadius(12)
+
+        private func startTimer() {
+            timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+                updateTimeRemaining()
+            }
+            updateTimeRemaining()
+        }
+
+        private func updateTimeRemaining() {
+            let formatter = ISO8601DateFormatter()
+            guard let endDate = formatter.date(from: endTime) else {
+                timeRemaining = "--:--"
+                return
+            }
+
+            let now = Date()
+            let interval = endDate.timeIntervalSince(now)
+
+            if interval <= 0 {
+                timeRemaining = "ENDED"
+                timer?.invalidate()
+                return
+            }
+
+            let minutes = Int(interval) / 60
+            let seconds = Int(interval) % 60
+            timeRemaining = String(format: "%02d:%02d", minutes, seconds)
+        }
     }
 
     // MARK: - Private Methods
@@ -548,8 +661,17 @@ struct LiveAuctionPageView: View {
 struct AuctionItemRowView: View {
     let item: AuctionItem
     let isActive: Bool
+    let isDarkMode: Bool
     let onTap: () -> Void
     let onBidTap: () -> Void
+
+    init(item: AuctionItem, isActive: Bool, isDarkMode: Bool = false, onTap: @escaping () -> Void, onBidTap: @escaping () -> Void) {
+        self.item = item
+        self.isActive = isActive
+        self.isDarkMode = isDarkMode
+        self.onTap = onTap
+        self.onBidTap = onBidTap
+    }
 
     var body: some View {
         Button(action: onTap) {
@@ -578,6 +700,7 @@ struct AuctionItemRowView: View {
                             .font(.headline)
                             .fontWeight(.semibold)
                             .lineLimit(1)
+                            .foregroundColor(isDarkMode ? .white : .primary)
 
                         Spacer()
 
@@ -610,7 +733,11 @@ struct AuctionItemRowView: View {
                 }
             }
             .padding()
-            .background(isActive ? Color.blue.opacity(0.1) : Color(.systemBackground))
+            .background(
+                isActive ?
+                Color.blue.opacity(isDarkMode ? 0.3 : 0.1) :
+                (isDarkMode ? Color.white.opacity(0.1) : Color(.systemBackground))
+            )
             .cornerRadius(12)
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
@@ -721,6 +848,359 @@ struct ItemDetailSheet: View {
                     }
                 }
             }
+        }
+    }
+}
+
+// MARK: - More Options Sheet
+
+struct MoreOptionsSheet: View {
+    @Environment(\.presentationMode) var presentationMode
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                Text("Video")
+                    .font(.title2)
+                    .fontWeight(.medium)
+                    .padding(.top, 20)
+
+                HStack(spacing: 20) {
+                    // Sound Option
+                    VStack(spacing: 12) {
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(Color(.systemGray5))
+                            .frame(width: 150, height: 120)
+                            .overlay(
+                                VStack(spacing: 8) {
+                                    Image(systemName: "speaker.wave.2.fill")
+                                        .font(.system(size: 28))
+                                        .foregroundColor(.primary)
+
+                                    Text("Sound")
+                                        .font(.system(size: 18, weight: .medium))
+                                        .foregroundColor(.primary)
+                                }
+                            )
+                    }
+                    .onTapGesture {
+                        print("🔊 Sound option tapped")
+                    }
+
+                    // Captions Option
+                    VStack(spacing: 12) {
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(Color(.systemGray5))
+                            .frame(width: 150, height: 120)
+                            .overlay(
+                                VStack(spacing: 8) {
+                                    Image(systemName: "captions.bubble.fill")
+                                        .font(.system(size: 28))
+                                        .foregroundColor(.red)
+
+                                    Text("Captions")
+                                        .font(.system(size: 18, weight: .medium))
+                                        .foregroundColor(.red)
+                                }
+                            )
+                    }
+                    .onTapGesture {
+                        print("📝 Captions option tapped")
+                    }
+                }
+
+                Spacer()
+            }
+            .navigationTitle("")
+            .navigationBarHidden(true)
+        }
+    }
+}
+
+// MARK: - Share Options Sheet
+
+struct ShareOptionsSheet: View {
+    let auctionId: String
+    let auctionTitle: String
+    @Environment(\.presentationMode) var presentationMode
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 0) {
+                    // Header with seller info
+                    HStack(spacing: 12) {
+                        // Profile image with golden border
+                        ZStack {
+                            Circle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.yellow, Color.orange],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 60, height: 60)
+
+                            Circle()
+                                .fill(Color.black)
+                                .frame(width: 50, height: 50)
+                                .overlay(
+                                    Image(systemName: "crown.fill")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(.yellow)
+                                )
+                        }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("goldenbidz")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+
+                            // Live stream card
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.black)
+                                .frame(height: 120)
+                                .overlay(
+                                    VStack(spacing: 8) {
+                                        HStack {
+                                            Text("Live")
+                                                .font(.caption)
+                                                .fontWeight(.bold)
+                                                .foregroundColor(.white)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.red)
+                                                .cornerRadius(4)
+                                            Spacer()
+                                        }
+                                        .padding(.horizontal, 8)
+                                        .padding(.top, 8)
+
+                                        Spacer()
+
+                                        VStack(spacing: 4) {
+                                            HStack {
+                                                Image(systemName: "crown.fill")
+                                                    .foregroundColor(.yellow)
+                                                Text("FAST VIP SHOW")
+                                                    .font(.caption)
+                                                    .fontWeight(.bold)
+                                                    .foregroundColor(.white)
+                                            }
+
+                                            HStack {
+                                                Image(systemName: "crown.fill")
+                                                    .foregroundColor(.yellow)
+                                                Text("$50 GIVEAWAYS...")
+                                                    .font(.caption)
+                                                    .fontWeight(.bold)
+                                                    .foregroundColor(.white)
+                                            }
+
+                                            Text("Shop Live Now!")
+                                                .font(.caption)
+                                                .foregroundColor(.gray)
+                                        }
+                                        .padding(.horizontal, 8)
+                                        .padding(.bottom, 8)
+                                    }
+                                )
+                        }
+                    }
+                    .padding()
+
+                    // Sharing options
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 20) {
+                        // Search
+                        shareOption(icon: "magnifyingglass", title: "Search", action: {})
+
+                        // User profiles
+                        shareOption(icon: "person.circle.fill", title: "mikeypalz", color: .pink, action: {})
+                        shareOption(icon: "person.circle.fill", title: "alexsmi734...", action: {})
+
+                        // Copy Link
+                        shareOption(icon: "link", title: "Copy Link", action: {
+                            UIPasteboard.general.string = "https://malloflebanon.com/auction/\(auctionId)"
+                        })
+
+                        // Messages
+                        shareOption(icon: "message.fill", title: "Messages", color: .green, action: {})
+
+                        // IG Stories
+                        shareOption(icon: "plus.circle.fill", title: "IG Stories", color: .orange, action: {})
+
+                        // Instagram
+                        shareOption(icon: "camera.circle.fill", title: "Instagram", color: .purple, action: {})
+
+                        // Messenger
+                        shareOption(icon: "paperplane.fill", title: "Messenger", color: .blue, action: {})
+                    }
+                    .padding()
+                }
+            }
+            .navigationTitle("")
+            .navigationBarHidden(true)
+        }
+    }
+
+    private func shareOption(icon: String, title: String, color: Color = .primary, action: @escaping () -> Void) -> some View {
+        VStack(spacing: 8) {
+            Button(action: action) {
+                Circle()
+                    .fill(color == .primary ? Color(.systemGray5) : color.opacity(0.2))
+                    .frame(width: 60, height: 60)
+                    .overlay(
+                        Image(systemName: icon)
+                            .font(.title2)
+                            .foregroundColor(color == .primary ? .primary : color)
+                    )
+            }
+
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.primary)
+                .multilineTextAlignment(.center)
+        }
+    }
+}
+
+// MARK: - Wallet Sheet
+
+struct WalletSheet: View {
+    @Environment(\.presentationMode) var presentationMode
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 24) {
+                Text("Wallet")
+                    .font(.title)
+                    .fontWeight(.medium)
+                    .padding(.top, 20)
+
+                VStack(spacing: 16) {
+                    // Shipping option
+                    HStack(spacing: 16) {
+                        Circle()
+                            .fill(Color(.systemGray5))
+                            .frame(width: 50, height: 50)
+                            .overlay(
+                                Image(systemName: "shippingbox.fill")
+                                    .font(.title3)
+                                    .foregroundColor(.primary)
+                            )
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Shipping")
+                                .font(.headline)
+                                .fontWeight(.medium)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Ship to Next To Alfa Store")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                Text("Saida 00961")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 8)
+
+                    Divider()
+
+                    // Add Payment Method
+                    HStack(spacing: 16) {
+                        Circle()
+                            .fill(Color(.systemGray5))
+                            .frame(width: 50, height: 50)
+                            .overlay(
+                                Image(systemName: "creditcard.fill")
+                                    .font(.title3)
+                                    .foregroundColor(.primary)
+                            )
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Add Payment Method")
+                                .font(.headline)
+                                .fontWeight(.medium)
+
+                            Text("You won't be charged until you purchase")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Spacer()
+
+                        Button("Add") {
+                            print("💳 Add Payment Method tapped")
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.black)
+                        .foregroundColor(.white)
+                        .cornerRadius(20)
+                    }
+                    .padding(.vertical, 8)
+
+                    Divider()
+
+                    // Make Referrals, Earn Credit
+                    HStack(spacing: 16) {
+                        Circle()
+                            .fill(Color.yellow.opacity(0.2))
+                            .frame(width: 50, height: 50)
+                            .overlay(
+                                Image(systemName: "gift.fill")
+                                    .font(.title3)
+                                    .foregroundColor(.yellow)
+                            )
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Make Referrals, Earn Credit")
+                                .font(.headline)
+                                .fontWeight(.medium)
+
+                            Text("Earn up to US$200 for each referral")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 8)
+
+                    Divider()
+
+                    // Promo Code
+                    HStack(spacing: 12) {
+                        TextField("Promo Code", text: .constant(""))
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+
+                        Button("Apply") {
+                            print("🎟️ Apply Promo Code tapped")
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color(.systemGray5))
+                        .foregroundColor(.primary)
+                        .cornerRadius(8)
+                    }
+                }
+                .padding(.horizontal)
+
+                Spacer()
+            }
+            .navigationTitle("")
+            .navigationBarHidden(true)
         }
     }
 }

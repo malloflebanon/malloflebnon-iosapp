@@ -40,6 +40,8 @@ struct AuctionSection: View {
     @State private var cancellables = Set<AnyCancellable>()
     @State private var presentingAuctionId: String = ""
     @State private var showingAuctionDetail = false
+    @State private var showingLiveAuction = false
+    @State private var liveAuctionId: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -88,6 +90,18 @@ struct AuctionSection: View {
             AuctionDetailView(auctionId: sheetItem.id)
                 .onAppear {
                     print("📱 [AuctionSection] Sheet presented with auction ID: \(sheetItem.id)")
+                }
+        }
+        .fullScreenCover(isPresented: $showingLiveAuction) {
+            LiveAuctionPageView(auctionId: liveAuctionId)
+                .onAppear {
+                    print("🚀 [AuctionSection] Full-screen LiveAuctionPageView presented")
+                    print("🎯 [AuctionSection] LiveAuctionPageView auctionId parameter: '\(liveAuctionId)'")
+                    print("📊 [AuctionSection] liveAuctionId state value: '\(liveAuctionId)'")
+                }
+                .onDisappear {
+                    print("👋 [AuctionSection] Full-screen LiveAuctionPageView dismissed")
+                    liveAuctionId = ""
                 }
         }
     }
@@ -163,16 +177,12 @@ struct AuctionSection: View {
                                 print("🎯 [AuctionSection] User tapped live auction: \(auction.title)")
                                 print("📱 [AuctionSection] Auction ID: \(auction._id)")
                                 print("📈 [AuctionSection] Auction Status: \(auction.status.displayName)")
+                                print("🚀 [AuctionSection] Opening LiveAuctionPageView directly for live auction")
 
                                 // Use dispatch to ensure state is set on main thread
                                 DispatchQueue.main.async {
-                                    print("🚀 [AuctionSection] Setting presentingAuctionId = \(auction._id)")
-                                    presentingAuctionId = auction._id
-                                    showingAuctionDetail = false
-                                    print("🚀 [AuctionSection] Setting showingAuctionDetail = true")
-                                    showingAuctionDetail = true
-                                    print("✅ [AuctionSection] Navigation state set, sheet should appear")
-                                    print("✅ [AuctionSection] Current presentingAuctionId value: '\(presentingAuctionId)'")
+                                    print("🎯 [AuctionSection] Setting liveAuctionId = \(auction._id)")
+                                    self.presentLiveAuction(auctionId: auction._id)
                                 }
                             }
                         }
@@ -268,6 +278,23 @@ struct AuctionSection: View {
 
         print("📝 [AuctionSection] Subscription stored in cancellables")
     }
+
+    private func presentLiveAuction(auctionId: String) {
+        print("🚀 [AuctionSection] presentLiveAuction called with ID: \(auctionId)")
+        guard !auctionId.isEmpty else {
+            print("❌ [AuctionSection] Cannot present live auction with empty ID")
+            return
+        }
+
+        liveAuctionId = auctionId
+        print("📱 [AuctionSection] Set liveAuctionId = \(liveAuctionId)")
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            print("🎯 [AuctionSection] Triggering fullScreenCover presentation")
+            showingLiveAuction = true
+            print("✅ [AuctionSection] showingLiveAuction = true")
+        }
+    }
 }
 
 // MARK: - Auction Detail View
@@ -337,18 +364,26 @@ struct AuctionDetailView: View {
         .sheet(isPresented: $showingBiddingSheet) {
             biddingSheet
         }
-        .sheet(isPresented: $showingLiveStream) {
+        .fullScreenCover(isPresented: $showingLiveStream) {
             if let auction = auction {
-                NavigationView {
-                    LiveStreamPlayerView(auctionId: auction._id, auctionTitle: auction.title)
-                        .navigationTitle("Live Auction")
-                        .toolbar {
-                            ToolbarItem(placement: .navigationBarTrailing) {
-                                Button("Close") {
-                                    showingLiveStream = false
-                                }
-                            }
-                        }
+                LiveAuctionPageView(auctionId: auction._id)
+                    .onAppear {
+                        print("📱 [AuctionDetailView] FullScreenCover opened - LiveAuctionPageView appearing for auction: \(auction._id)")
+                    }
+            } else {
+                Text("Error: Auction data not available")
+                    .onAppear {
+                        print("❌ [AuctionDetailView] FullScreenCover opened but auction data is nil")
+                    }
+            }
+        }
+        .onChange(of: showingLiveStream) { isShowing in
+            print("📱 [AuctionDetailView] showingLiveStream changed to: \(isShowing)")
+            if isShowing {
+                if let auction = auction {
+                    print("🎯 [AuctionDetailView] About to show WebRTC sheet for auction: \(auction._id) (\(auction.title))")
+                } else {
+                    print("❌ [AuctionDetailView] showingLiveStream = true but auction is nil")
                 }
             }
         }
@@ -1398,10 +1433,10 @@ struct LiveStreamPlayerView: View {
                         Circle()
                             .fill(isStreamActive ? Color.red : Color.gray)
                             .frame(width: 8, height: 8)
-                            .opacity(isStreamActive && livePulse ? 0.3 : 1.0)
+                            .opacity(isStreamActive && livePulse ? 0.6 : 1.0)
                             .animation(
                                 isStreamActive ?
-                                Animation.easeInOut(duration: 1.0).repeatForever(autoreverses: true) :
+                                Animation.easeInOut(duration: 2.0).repeatForever(autoreverses: true) :
                                 .default,
                                 value: livePulse
                             )
@@ -1419,17 +1454,13 @@ struct LiveStreamPlayerView: View {
                     Spacer()
 
                     if isStreamActive {
-                        Text("\(String(format: "%.1f", fps)) FPS")
+                        Text("\(String(format: "%.0f", fps)) FPS")
                             .font(.caption)
                             .foregroundColor(.green)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(Color.green.opacity(connectionPulse ? 0.3 : 0.1))
+                            .background(Color.green.opacity(0.15))
                             .cornerRadius(4)
-                            .animation(
-                                Animation.easeInOut(duration: 0.8).repeatForever(autoreverses: true),
-                                value: connectionPulse
-                            )
                     }
                 }
                 .padding()
@@ -1766,7 +1797,7 @@ struct LiveStreamPlayerView: View {
                             Text(isStreamActive ? "Disconnect" : "Connect")
                                 .font(.title3)
                         }
-                        .foregroundColor(isStreamActive ? .red : .green)
+                        .foregroundColor(.green)
                         .padding(.horizontal, 24)
                         .padding(.vertical, 12)
                         .background(Color.black.opacity(0.6))
@@ -1819,7 +1850,7 @@ struct LiveStreamPlayerView: View {
         // Start timer to simulate streaming
         streamTimer = Timer.scheduledTimer(withTimeInterval: 1.0/30.0, repeats: true) { _ in
             generateMockFrame()
-            updateFPS()
+            updateFPSOptimized()
         }
     }
 
@@ -1856,11 +1887,25 @@ struct LiveStreamPlayerView: View {
         }
     }
 
-    private func updateFPS() {
+    // Optimized FPS calculation - update less frequently
+    @State private var fpsUpdateCounter: Int = 0
+    @State private var fpsAccumulator: Double = 0.0
+
+    private func updateFPSOptimized() {
         let now = Date()
         let timeDiff = now.timeIntervalSince(lastFrameTime)
+
         if timeDiff > 0 {
-            fps = 1.0 / timeDiff
+            // Accumulate FPS measurements
+            fpsAccumulator += 1.0 / timeDiff
+            fpsUpdateCounter += 1
+
+            // Update displayed FPS every 5 frames for smoother UI
+            if fpsUpdateCounter >= 5 {
+                fps = fpsAccumulator / Double(fpsUpdateCounter)
+                fpsAccumulator = 0.0
+                fpsUpdateCounter = 0
+            }
         }
         lastFrameTime = now
     }
@@ -1885,12 +1930,31 @@ struct LiveStreamPlayerView: View {
     }
 
     private func connectStream() {
+        print("🔌 [DEBUG] ===== CONNECT STREAM CALLED =====")
+        print("🔌 [DEBUG] Auction ID: \(auctionId)")
+        print("🔌 [DEBUG] Auction Title: \(auctionTitle)")
+        print("🔌 [DEBUG] Current connecting state: \(isConnecting)")
+        print("🔌 [DEBUG] Current active state: \(isStreamActive)")
+        print("🔌 [DEBUG] Current connection status: '\(connectionStatus)'")
+
         isConnecting = true
         connectionStatus = "Connecting..."
+
+        print("🔌 [DEBUG] State updated - isConnecting: \(isConnecting)")
+        print("🔌 [DEBUG] About to call setupRealStreamHandling()")
+
         setupRealStreamHandling()
+
+        print("🔌 [DEBUG] setupRealStreamHandling() call completed")
+        print("🔌 [DEBUG] ===== CONNECT STREAM END =====")
     }
 
     private func disconnectStream() {
+        print("🔌❌ [DEBUG] ===== DISCONNECT STREAM CALLED =====")
+        print("🔌❌ [DEBUG] Before disconnect - streamTimer: \(streamTimer != nil ? "active" : "nil")")
+        print("🔌❌ [DEBUG] Before disconnect - isStreamActive: \(isStreamActive)")
+        print("🔌❌ [DEBUG] Before disconnect - currentFrame: \(currentFrame != nil ? "present" : "nil")")
+
         streamTimer?.invalidate()
         streamTimer = nil
         isStreamActive = false
@@ -1898,19 +1962,59 @@ struct LiveStreamPlayerView: View {
         connectionStatus = "Disconnected"
         frameCount = 0
 
+        print("🔌❌ [DEBUG] After disconnect - isStreamActive: \(isStreamActive)")
+        print("🔌❌ [DEBUG] After disconnect - connectionStatus: '\(connectionStatus)'")
+
         // Stop pulse animations
         livePulse = false
         connectionPulse = false
 
-        // Disconnect WebSocket
-        webSocketTask?.cancel()
-        webSocketTask = nil
+        print("🔌❌ [DEBUG] About to cancel WebSocket task...")
+
+        // Disconnect WebSocket properly with enhanced cleanup
+        if let task = webSocketTask {
+            print("🔌❌ [DEBUG] Cancelling WebSocket task with goingAway...")
+            task.cancel(with: .goingAway, reason: "User disconnect".data(using: .utf8))
+            webSocketTask = nil
+            print("🔌❌ [DEBUG] WebSocket task cancelled and cleared")
+        } else {
+            print("🔌❌ [DEBUG] No WebSocket task to cancel")
+        }
+
+        // Also ensure isConnecting is false to prevent race conditions
+        isConnecting = false
+
+        // Clear current frame to prevent memory buildup
+        currentFrame = nil
+        print("🔌❌ [DEBUG] Cleared current frame and connecting state")
+
+        print("🔌❌ [DEBUG] WebSocket cleanup completed")
     }
 
     private func reconnectStream() {
+        print("🔄 [DEBUG] ===== RECONNECT STREAM BUTTON CLICKED =====")
+        print("🔄 [DEBUG] User clicked reconnect button")
+        print("🔄 [DEBUG] Before disconnect - isConnecting: \(isConnecting), isStreamActive: \(isStreamActive)")
+
+        // Prevent multiple reconnect attempts
+        guard !isConnecting else {
+            print("🔄 [DEBUG] ⚠️ Reconnect ignored - already connecting")
+            return
+        }
+
         disconnectStream()
+
+        print("🔄 [DEBUG] After disconnect - isConnecting: \(isConnecting), isStreamActive: \(isStreamActive)")
+        print("🔄 [DEBUG] Waiting 0.5 seconds before reconnecting to allow cleanup...")
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            connectStream()
+            print("🔄 [DEBUG] 0.5 second delay completed, calling connectStream()")
+            // Double check we're still not connecting from another source
+            guard !self.isConnecting else {
+                print("🔄 [DEBUG] ⚠️ Reconnect cancelled - connection started from elsewhere")
+                return
+            }
+            self.connectStream()
         }
     }
 
@@ -1938,68 +2042,79 @@ struct LiveStreamPlayerView: View {
     // MARK: - Real Video Streaming Methods
 
     private func setupRealStreamHandling() {
-        print("🔌 [LiveStreamPlayer] Setting up direct WebSocket connection for auction: \(auctionId)")
+        print("🌐 [DEBUG] ===== SETUP REAL STREAM HANDLING CALLED =====")
+        print("🌐 [DEBUG] Auction ID: \(auctionId)")
+        print("🌐 [DEBUG] About to set up WebSocket connection")
 
         // Connect to WebSocket
         connectionStatus = "Connecting to live stream..."
         isConnecting = true
 
+        print("🌐 [DEBUG] Status updated to: '\(connectionStatus)'")
+        print("🌐 [DEBUG] isConnecting set to: \(isConnecting)")
+        print("🌐 [DEBUG] About to call connectToWebSocket()")
+
         connectToWebSocket()
+
+        print("🌐 [DEBUG] connectToWebSocket() call completed")
+        print("🌐 [DEBUG] ===== SETUP REAL STREAM HANDLING END =====")
     }
 
+    // Optimized frame processing queue - reuse single background queue
+    private static let frameProcessingQueue = DispatchQueue(label: "com.malloflebanon.frameProcessing", qos: .userInitiated)
+
     private func processLiveFrame(_ frameData: LiveFrameData) {
-        print("🎬 [LiveStreamPlayer] Processing live frame for auction: \(frameData.auctionId)")
+        // Optimized throttling - more aggressive frame dropping for performance
+        let currentTime = CFAbsoluteTimeGetCurrent()
 
-        // Throttle frame processing to avoid overwhelming the main thread
-        let currentTime = Date().timeIntervalSince1970
-
-        // Skip frames if we're processing too fast (limit to ~20fps for smoother performance)
-        if currentTime - lastFrameTime.timeIntervalSince1970 < 0.05 {
-            print("⚡ [LiveStreamPlayer] Dropping frame for performance")
-            return
+        // Skip frames if processing too fast (limit to 15fps max for better performance)
+        if currentTime - lastFrameTime.timeIntervalSince1970 < 0.067 {
+            return // Drop frame silently for performance
         }
 
-        // Move heavy image processing to background queue
-        DispatchQueue.global(qos: .userInitiated).async {
-            // Handle base64 data URL format from frontend
-            let base64String = frameData.imageData.replacingOccurrences(of: "data:image/jpeg;base64,", with: "")
-            print("📸 [LiveStreamPlayer] Base64 data length: \(base64String.count)")
+        // Use static queue to avoid creating new queues
+        Self.frameProcessingQueue.async {
+            // Optimized base64 processing
+            let base64String = frameData.imageData.hasPrefix("data:image/") ?
+                String(frameData.imageData.dropFirst(23)) : frameData.imageData
 
-            guard let imageData = Data(base64Encoded: base64String) else {
-                print("❌ [LiveStreamPlayer] Failed to decode base64 data")
-                return
+            guard let imageData = Data(base64Encoded: base64String),
+                  let image = UIImage(data: imageData) else {
+                return // Fail silently for performance
             }
 
-            guard let image = UIImage(data: imageData) else {
-                print("❌ [LiveStreamPlayer] Failed to create UIImage from data")
-                return
-            }
-
-            print("✅ [LiveStreamPlayer] Successfully created UIImage: \(image.size)")
-
-            // Update UI on main thread
+            // Batch UI updates on main thread
             DispatchQueue.main.async {
-                // Update frame and streaming status
-                self.currentFrame = image
-                self.frameCount = frameData.frameNumber ?? self.frameCount + 1
-
-                // Start streaming if this is the first frame
-                if !self.isStreamActive {
-                    self.connectionStatus = "Live stream active"
-                    self.isStreamActive = true
-                    self.livePulse = true
-                    self.connectionPulse = true
-                    self.setupStreamMetrics()
-                    print("🟢 [LiveStreamPlayer] Stream activated!")
-                }
-
-                // Update FPS calculation
-                self.updateFPS()
-                print("📹 [LiveStreamPlayer] Frame processed: \(self.frameCount), FPS: \(String(format: "%.1f", self.fps))")
-
-                print("✅ [LiveStreamPlayer] Processed frame #\(self.frameCount) - FPS: \(String(format: "%.1f", self.fps))")
+                self.updateFrameUI(image: image, frameNumber: frameData.frameNumber)
             }
         }
+    }
+
+    // Separate method for UI updates to reduce main thread blocking
+    private func updateFrameUI(image: UIImage, frameNumber: Int?) {
+        // Release previous frame to prevent memory buildup
+        self.currentFrame = nil
+
+        // Set new frame
+        self.currentFrame = image
+        self.frameCount = frameNumber ?? self.frameCount + 1
+
+        // Activate stream only once
+        if !self.isStreamActive {
+            self.activateStream()
+        }
+
+        // Update FPS less frequently for performance
+        self.updateFPSOptimized()
+    }
+
+    // Optimized stream activation - called only once
+    private func activateStream() {
+        self.connectionStatus = "Live stream active"
+        self.isStreamActive = true
+        self.livePulse = true
+        self.connectionPulse = true
+        self.setupStreamMetrics()
     }
 
     private func setupStreamMetrics() {
@@ -2011,52 +2126,161 @@ struct LiveStreamPlayerView: View {
     }
 
     private func connectToWebSocket() {
-        // Get base URL from APIService
-        let apiBaseURL = APIService.shared.baseURLForDebugging
-        // Remove /api from the URL since Socket.IO runs on the root path
-        let baseURL = apiBaseURL.replacingOccurrences(of: "/api", with: "")
+        print("🔗 [DEBUG] ===== CONNECT TO WEBSOCKET CALLED =====")
 
-        print("🔗 [LiveStreamPlayer] Starting Socket.IO connection to: \(baseURL)")
-
-        // Step 1: Socket.IO handshake - get session ID
-        performSocketIOHandshake(baseURL: baseURL)
-    }
-
-    private func performSocketIOHandshake(baseURL: String) {
-        // Socket.IO handshake URL format: http://localhost:3007/socket.io/?EIO=4&transport=polling
-        guard let handshakeURL = URL(string: "\(baseURL)/socket.io/?EIO=4&transport=polling") else {
-            print("❌ [LiveStreamPlayer] Invalid handshake URL")
-            connectionStatus = "Connection failed"
-            isConnecting = false
+        // CRUCIAL: Prevent multiple simultaneous connections
+        if isConnecting {
+            print("🔗 [DEBUG] ⚠️ Connection already in progress (isConnecting=true), skipping duplicate request")
             return
         }
 
-        print("🤝 [LiveStreamPlayer] Performing Socket.IO handshake: \(handshakeURL)")
+        // CRUCIAL: Cancel any existing WebSocket connection first and wait
+        if let existingTask = webSocketTask {
+            print("🔗 [DEBUG] Cancelling existing WebSocket connection...")
+            existingTask.cancel(with: .goingAway, reason: "Reconnecting".data(using: .utf8))
+            webSocketTask = nil
+
+            // Wait a moment for cleanup to complete before starting new connection
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self.continueWebSocketConnection()
+            }
+            return
+        }
+
+        // No existing connection, proceed immediately
+        continueWebSocketConnection()
+    }
+
+    private func continueWebSocketConnection() {
+        print("🔗 [DEBUG] ===== CONTINUE WEBSOCKET CONNECTION =====")
+        print("🔗 [DEBUG] Current thread: \(Thread.current)")
+        print("🔗 [DEBUG] Connection timestamp: \(Date())")
+
+        // Set connecting state to prevent duplicates
+        isConnecting = true
+        print("🔗 [DEBUG] ✅ Set isConnecting = true")
+
+        // Get base URL from APIService
+        let apiBaseURL = APIService.shared.baseURLForDebugging
+        print("🔗 [DEBUG] API Base URL from APIService: '\(apiBaseURL)'")
+
+        // Remove /api from the URL since Socket.IO runs on the root path
+        let baseURL = apiBaseURL.replacingOccurrences(of: "/api", with: "")
+        print("🔗 [DEBUG] Modified Base URL for Socket.IO: '\(baseURL)'")
+        print("🔗 [DEBUG] Base URL validation: \(baseURL.contains("http") ? "✅ Contains http" : "❌ Missing http")")
+
+        print("🔗 [DEBUG] About to call performSocketIOHandshake with: \(baseURL)")
+
+        // Step 1: Socket.IO handshake - get session ID
+        performSocketIOHandshake(baseURL: baseURL)
+
+        print("🔗 [DEBUG] performSocketIOHandshake call completed")
+        print("🔗 [DEBUG] ===== CONTINUE WEBSOCKET CONNECTION END =====")
+    }
+
+    private func performSocketIOHandshake(baseURL: String) {
+        print("🤝 [DEBUG] ===== PERFORM SOCKET.IO HANDSHAKE =====")
+        print("🤝 [DEBUG] Base URL received: '\(baseURL)'")
+        print("🤝 [DEBUG] Current connection status: '\(connectionStatus)'")
+        print("🤝 [DEBUG] Current isConnecting state: \(isConnecting)")
+
+        // Socket.IO handshake URL format: http://localhost:3007/socket.io/?EIO=4&transport=polling
+        let fullHandshakeURL = "\(baseURL)/socket.io/?EIO=4&transport=polling"
+        print("🤝 [DEBUG] Full handshake URL: '\(fullHandshakeURL)'")
+
+        guard let handshakeURL = URL(string: fullHandshakeURL) else {
+            print("❌ [DEBUG] Invalid handshake URL: '\(fullHandshakeURL)'")
+            DispatchQueue.main.async {
+                self.connectionStatus = "Connection failed - Invalid URL"
+                self.isConnecting = false
+                print("❌ [DEBUG] Set isConnecting = false due to invalid URL")
+            }
+            return
+        }
+
+        print("🤝 [DEBUG] ✅ Handshake URL created successfully: \(handshakeURL)")
+        print("🤝 [DEBUG] URL scheme: \(handshakeURL.scheme ?? "nil")")
+        print("🤝 [DEBUG] URL host: \(handshakeURL.host ?? "nil")")
+        print("🤝 [DEBUG] URL port: \(handshakeURL.port ?? -1)")
+        print("🤝 [DEBUG] About to perform HTTP GET request...")
 
         var request = URLRequest(url: handshakeURL)
         request.httpMethod = "GET"
+        request.timeoutInterval = 10.0
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+
+        print("🤝 [DEBUG] Request configured:")
+        print("🤝 [DEBUG]   - Method: \(request.httpMethod ?? "nil")")
+        print("🤝 [DEBUG]   - Timeout: \(request.timeoutInterval)")
+        print("🤝 [DEBUG]   - Headers: \(request.allHTTPHeaderFields ?? [:])")
+
+        print("🤝 [DEBUG] Starting URLSession.shared.dataTask...")
 
         URLSession.shared.dataTask(with: request) { data, response, error in
+            print("🤝 [DEBUG] ===== HANDSHAKE RESPONSE RECEIVED =====")
+            print("🤝 [DEBUG] Response timestamp: \(Date())")
+            print("🤝 [DEBUG] Response thread: \(Thread.current)")
+
             if let error = error {
-                print("❌ [LiveStreamPlayer] Handshake error: \(error)")
+                print("❌ [DEBUG] ===== HANDSHAKE ERROR OCCURRED =====")
+                print("❌ [DEBUG] Error type: \(type(of: error))")
+                print("❌ [DEBUG] Error code: \((error as NSError).code)")
+                print("❌ [DEBUG] Error domain: \((error as NSError).domain)")
+                print("❌ [DEBUG] Error description: \(error.localizedDescription)")
+                print("❌ [DEBUG] Full error: \(error)")
+
                 DispatchQueue.main.async {
-                    self.connectionStatus = "Handshake failed"
+                    print("❌ [DEBUG] Setting handshake failed status on main thread")
+                    self.connectionStatus = "Handshake failed: \(error.localizedDescription)"
                     self.isConnecting = false
+                    print("❌ [DEBUG] Set isConnecting = false due to handshake error")
                 }
                 return
             }
 
-            guard let data = data,
-                  let responseString = String(data: data, encoding: .utf8) else {
-                print("❌ [LiveStreamPlayer] Invalid handshake response")
+            print("🤝 [DEBUG] ✅ No error - checking response and data...")
+
+            if let httpResponse = response as? HTTPURLResponse {
+                print("🤝 [DEBUG] ===== HTTP RESPONSE DETAILS =====")
+                print("🤝 [DEBUG] HTTP Status Code: \(httpResponse.statusCode)")
+                print("🤝 [DEBUG] Status code success: \(200...299 ~= httpResponse.statusCode ? "✅ Success" : "❌ Error")")
+                print("🤝 [DEBUG] HTTP Headers:")
+                for (key, value) in httpResponse.allHeaderFields {
+                    print("🤝 [DEBUG]   - \(key): \(value)")
+                }
+            } else {
+                print("⚠️ [DEBUG] Response is not HTTPURLResponse: \(response?.description ?? "nil")")
+            }
+
+            print("🤝 [DEBUG] Checking data...")
+            guard let data = data else {
+                print("❌ [DEBUG] No data received")
                 DispatchQueue.main.async {
-                    self.connectionStatus = "Invalid response"
+                    self.connectionStatus = "No data received"
                     self.isConnecting = false
+                    print("❌ [DEBUG] Set isConnecting = false due to no data")
                 }
                 return
             }
 
-            print("📝 [LiveStreamPlayer] Handshake response: \(responseString)")
+            print("🤝 [DEBUG] Data received: \(data.count) bytes")
+
+            guard let responseString = String(data: data, encoding: .utf8) else {
+                print("❌ [DEBUG] Failed to convert data to string")
+                print("❌ [DEBUG] Raw data: \(data)")
+                DispatchQueue.main.async {
+                    self.connectionStatus = "Invalid response encoding"
+                    self.isConnecting = false
+                    print("❌ [DEBUG] Set isConnecting = false due to string conversion failure")
+                }
+                return
+            }
+
+            print("📝 [DEBUG] ===== HANDSHAKE RESPONSE CONTENT =====")
+            print("📝 [DEBUG] Response: '\(responseString)'")
+            print("📝 [DEBUG] Response length: \(responseString.count) characters")
+            print("📝 [DEBUG] First 10 chars: '\(String(responseString.prefix(10)))'")
+            print("📝 [DEBUG] Starts with '0{': \(responseString.hasPrefix("0{") ? "✅ Yes" : "❌ No")")
 
             // Parse Socket.IO handshake response (format: 0{"sid":"sessionId","upgrades":["websocket"],...})
             if responseString.hasPrefix("0{") {
@@ -2089,65 +2313,144 @@ struct LiveStreamPlayerView: View {
     }
 
     private func upgradeToWebSocket(baseURL: String, sessionId: String) {
+        print("🚀 [DEBUG] ===== UPGRADE TO WEBSOCKET =====")
+        print("🚀 [DEBUG] Base URL: '\(baseURL)'")
+        print("🚀 [DEBUG] Session ID: '\(sessionId)'")
+        print("🚀 [DEBUG] Upgrade timestamp: \(Date())")
+
         // Socket.IO WebSocket URL format: ws://localhost:3007/socket.io/?EIO=4&transport=websocket&sid=sessionId
         let wsURLString = baseURL
             .replacingOccurrences(of: "http://", with: "ws://")
             .replacingOccurrences(of: "https://", with: "wss://")
 
-        guard let wsURL = URL(string: "\(wsURLString)/socket.io/?EIO=4&transport=websocket&sid=\(sessionId)") else {
-            print("❌ [LiveStreamPlayer] Invalid WebSocket upgrade URL")
-            connectionStatus = "WebSocket URL failed"
-            isConnecting = false
+        print("🚀 [DEBUG] WebSocket URL string: '\(wsURLString)'")
+
+        let fullWSURL = "\(wsURLString)/socket.io/?EIO=4&transport=websocket&sid=\(sessionId)"
+        print("🚀 [DEBUG] Full WebSocket URL: '\(fullWSURL)'")
+
+        guard let wsURL = URL(string: fullWSURL) else {
+            print("❌ [DEBUG] Invalid WebSocket upgrade URL: '\(fullWSURL)'")
+            DispatchQueue.main.async {
+                self.connectionStatus = "WebSocket URL failed"
+                self.isConnecting = false
+                print("❌ [DEBUG] Set isConnecting = false due to invalid WebSocket URL")
+            }
             return
         }
 
-        print("🚀 [LiveStreamPlayer] Upgrading to WebSocket: \(wsURL)")
+        print("🚀 [DEBUG] ✅ WebSocket URL created successfully")
+        print("🚀 [DEBUG] WS scheme: \(wsURL.scheme ?? "nil")")
+        print("🚀 [DEBUG] WS host: \(wsURL.host ?? "nil")")
+        print("🚀 [DEBUG] WS port: \(wsURL.port ?? -1)")
+
+        print("🔌 [DEBUG] Creating WebSocket task...")
 
         // Create WebSocket task with session ID
         webSocketTask = URLSession.shared.webSocketTask(with: wsURL)
 
-        // Start listening for messages
+        print("🔌 [DEBUG] ✅ WebSocket task created")
+        print("🔌 [DEBUG] WebSocket task state: \(webSocketTask?.state.rawValue ?? -1)")
+
+        print("🔌 [DEBUG] Starting message listener BEFORE resume...")
+
+        // Start listening for messages BEFORE resuming
         receiveMessage()
+
+        print("🔌 [DEBUG] ✅ Message listener started")
+        print("🔌 [DEBUG] About to resume WebSocket connection...")
 
         // Resume connection
         webSocketTask?.resume()
 
-        // Send Socket.IO upgrade message
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        print("🔌 [DEBUG] ✅ WebSocket resumed")
+        print("🔌 [DEBUG] WebSocket state after resume: \(webSocketTask?.state.rawValue ?? -1)")
+
+        // Send Socket.IO upgrade message with longer delay for connection stability
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            print("🔌 [DEBUG] ===== 1.0s DELAY COMPLETE - SENDING UPGRADE PROBE =====")
             self.sendSocketIOUpgrade()
         }
 
-        // Send initial connection and join auction after a bit more delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+        // Send initial connection and join auction with even longer delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            print("🔌 [DEBUG] ===== 2.0s DELAY COMPLETE - SENDING CONNECT =====")
             self.sendSocketIOConnect()
+        }
+
+        // Join auction with additional delay to ensure connection is stable
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            print("🔌 [DEBUG] ===== 3.0s DELAY COMPLETE - JOINING AUCTION =====")
             self.sendJoinAuction()
         }
+
+        print("🚀 [DEBUG] ===== UPGRADE TO WEBSOCKET END =====")
     }
 
     private func sendSocketIOUpgrade() {
+        print("📡 [DEBUG] ===== SEND SOCKET.IO UPGRADE PROBE =====")
+        print("📡 [DEBUG] WebSocket task exists: \(webSocketTask != nil ? "✅ Yes" : "❌ No")")
+        print("📡 [DEBUG] WebSocket state: \(webSocketTask?.state.rawValue ?? -1)")
+        print("📡 [DEBUG] Sending '2probe' message...")
+
         // Socket.IO upgrade message format: "2probe"
         webSocketTask?.send(.string("2probe")) { error in
             if let error = error {
-                print("❌ [LiveStreamPlayer] Failed to send upgrade probe: \(error)")
+                print("❌ [DEBUG] Failed to send upgrade probe:")
+                print("❌ [DEBUG]   - Error: \(error)")
+                print("❌ [DEBUG]   - Error code: \((error as NSError).code)")
+                print("❌ [DEBUG]   - Error domain: \((error as NSError).domain)")
             } else {
-                print("📡 [LiveStreamPlayer] Sent Socket.IO upgrade probe")
+                print("✅ [DEBUG] Successfully sent Socket.IO upgrade probe '2probe'")
+                print("✅ [DEBUG] Waiting for '3probe' response...")
             }
         }
+        print("📡 [DEBUG] ===== SEND UPGRADE PROBE COMPLETED =====")
     }
 
     private func sendSocketIOConnect() {
+        print("🔌 [DEBUG] ===== SEND SOCKET.IO CONNECT =====")
+        print("🔌 [DEBUG] WebSocket task exists: \(webSocketTask != nil ? "✅ Yes" : "❌ No")")
+        print("🔌 [DEBUG] WebSocket state: \(webSocketTask?.state.rawValue ?? -1)")
+        print("🔌 [DEBUG] Current connection status: '\(connectionStatus)'")
+        print("🔌 [DEBUG] Current isConnecting: \(isConnecting)")
+        print("🔌 [DEBUG] Sending '40' message...")
+
         // Socket.IO connect message format: "40" (4=ENGINE.IO message, 0=connect)
         webSocketTask?.send(.string("40")) { error in
             if let error = error {
-                print("❌ [LiveStreamPlayer] Failed to send connect: \(error)")
-            } else {
-                print("🔌 [LiveStreamPlayer] Sent Socket.IO connect")
+                print("❌ [DEBUG] Failed to send Socket.IO connect:")
+                print("❌ [DEBUG]   - Error: \(error)")
+                print("❌ [DEBUG]   - Error code: \((error as NSError).code)")
+                print("❌ [DEBUG]   - Error domain: \((error as NSError).domain)")
                 DispatchQueue.main.async {
-                    self.connectionStatus = "Connected to stream"
+                    print("❌ [DEBUG] Setting connection failed status")
+                    self.connectionStatus = "Failed to connect"
                     self.isConnecting = false
+                    print("❌ [DEBUG] Set isConnecting = false due to connect send failure")
+                }
+            } else {
+                print("✅ [DEBUG] Successfully sent Socket.IO connect '40'")
+                print("✅ [DEBUG] Waiting for server acknowledgment...")
+                DispatchQueue.main.async {
+                    print("🔄 [DEBUG] Updating status to 'Awaiting server response...'")
+                    self.connectionStatus = "Awaiting server response..."
+                    print("🔄 [DEBUG] Keeping isConnecting = true until server confirmation")
+                    // Keep isConnecting = true until we receive "auction_joined" confirmation
+
+                    // Add timeout to prevent infinite waiting
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 15.0) {
+                        if self.isConnecting {
+                            print("⏰ [DEBUG] Connection timeout - forcing stream activation")
+                            self.connectionStatus = "Connected (timeout fallback)"
+                            self.isConnecting = false
+                            self.isStreamActive = true
+                            print("✅ [DEBUG] Fallback activation - isConnecting: false, isStreamActive: true")
+                        }
+                    }
                 }
             }
         }
+        print("🔌 [DEBUG] ===== SEND CONNECT COMPLETED =====")
     }
 
     private func receiveMessage() {
@@ -2158,14 +2461,48 @@ struct LiveStreamPlayerView: View {
                 self.receiveMessage() // Continue listening
 
             case .failure(let error):
-                print("❌ [LiveStreamPlayer] WebSocket error: \(error)")
+                print("❌ [DEBUG] WebSocket error occurred: \(error.localizedDescription)")
+                print("❌ [DEBUG] Error code: \(error._code)")
+                print("❌ [DEBUG] Error domain: \(error._domain)")
+                print("❌ [DEBUG] Full error: \(error)")
+
                 DispatchQueue.main.async {
-                    self.connectionStatus = "Connection lost"
                     self.isConnecting = false
 
-                    // Attempt reconnection after 5 seconds
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-                        self.connectToWebSocket()
+                    // Check if this is a cancellation error (code -999) - DO NOT retry
+                    if error._code == -999 {
+                        print("🔄 [DEBUG] WebSocket was cancelled (expected) - no retry needed")
+                        self.connectionStatus = "Disconnected"
+                        return
+                    }
+
+                    self.connectionStatus = "Connection lost"
+
+                    // Check if this is a "Socket is not connected" error (code 57)
+                    if error._code == 57 {
+                        print("🔄 [DEBUG] Socket disconnection detected - will retry connection...")
+                        // Attempt reconnection after 3 seconds for socket disconnection
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                            print("🔄 [DEBUG] Retrying WebSocket connection after socket error...")
+                            // Only retry if we're not already connecting
+                            guard !self.isConnecting else {
+                                print("🔄 [DEBUG] ⚠️ Retry cancelled - already connecting")
+                                return
+                            }
+                            self.connectToWebSocket()
+                        }
+                    } else {
+                        print("🔄 [DEBUG] General WebSocket error - will retry after longer delay...")
+                        // Attempt reconnection after 5 seconds for other errors
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                            print("🔄 [DEBUG] Retrying WebSocket connection after general error...")
+                            // Only retry if we're not already connecting
+                            guard !self.isConnecting else {
+                                print("🔄 [DEBUG] ⚠️ Retry cancelled - already connecting")
+                                return
+                            }
+                            self.connectToWebSocket()
+                        }
                     }
                 }
             }
@@ -2175,8 +2512,15 @@ struct LiveStreamPlayerView: View {
     private func handleWebSocketMessage(_ message: URLSessionWebSocketTask.Message) {
         switch message {
         case .string(let text):
-            print("📨 [LiveStreamPlayer] Received: \(text.prefix(200))...")
-            parseSocketMessage(text)
+            // Reduce logging for performance - only log significant messages
+            if text.contains("video_frame") || text.contains("live_frame") {
+                parseSocketMessage(text)
+            } else if text.count < 100 {
+                parseSocketMessage(text)
+            } else {
+                // Skip verbose non-video messages for performance
+                return
+            }
 
         case .data(let data):
             if let text = String(data: data, encoding: .utf8) {
@@ -2184,21 +2528,47 @@ struct LiveStreamPlayerView: View {
             }
 
         @unknown default:
-            print("❓ [LiveStreamPlayer] Unknown message type")
+            break // Handle silently for performance
         }
     }
 
     private func parseSocketMessage(_ text: String) {
-        print("📨 [LiveStreamPlayer] Raw message: \(text.prefix(100))...")
+        print("📥 [DEBUG] Received WebSocket message: '\(text)'")
 
         // Handle Socket.IO protocol messages
         if text == "3probe" {
             // Response to our probe - send upgrade complete
-            webSocketTask?.send(.string("5")) { error in
+            print("🔄 [DEBUG] Received probe response, sending upgrade complete...")
+            webSocketTask?.send(.string("5")) { _ in
+                print("✅ [DEBUG] Sent upgrade complete")
+            }
+            return
+        }
+
+        // Handle Socket.IO connection acknowledgment
+        if text == "40" {
+            print("🔌 [DEBUG] ===== SOCKET.IO CONNECTION CONFIRMED =====")
+            DispatchQueue.main.async {
+                self.connectionStatus = "Socket connected"
+                print("✅ [DEBUG] Socket.IO connection established successfully")
+            }
+
+            // Send auction join request after successful connection
+            print("🏠 [DEBUG] Sending joinAuction request...")
+            let joinAuctionMessage = "42[\"joinAuction\",{\"auctionId\":\"\(auctionId)\"}]"
+            print("🏠 [DEBUG] Join message: \(joinAuctionMessage)")
+            webSocketTask?.send(.string(joinAuctionMessage)) { error in
                 if let error = error {
-                    print("❌ [LiveStreamPlayer] Failed to send upgrade complete: \(error)")
+                    print("❌ [DEBUG] Failed to send joinAuction: \(error)")
+                    DispatchQueue.main.async {
+                        self.connectionStatus = "Failed to join auction"
+                        self.isConnecting = false
+                    }
                 } else {
-                    print("✅ [LiveStreamPlayer] Sent upgrade complete")
+                    print("✅ [DEBUG] Successfully sent joinAuction request")
+                    DispatchQueue.main.async {
+                        self.connectionStatus = "Joining auction..."
+                    }
                 }
             }
             return
@@ -2259,8 +2629,28 @@ struct LiveStreamPlayerView: View {
 
             case "auction_joined":
                 DispatchQueue.main.async {
-                    self.connectionStatus = "Connected to auction"
+                    print("🎯 [DEBUG] ===== AUCTION JOINED CONFIRMED =====")
+                    self.connectionStatus = "Live"
                     self.isConnecting = false
+                    self.isStreamActive = true
+                    print("✅ [DEBUG] Stream is now ACTIVE - isConnecting: false, isStreamActive: true")
+                }
+            case "auctionJoined": // Handle camelCase variant
+                DispatchQueue.main.async {
+                    print("🎯 [DEBUG] ===== AUCTION JOINED (camelCase) CONFIRMED =====")
+                    self.connectionStatus = "Live"
+                    self.isConnecting = false
+                    self.isStreamActive = true
+                    print("✅ [DEBUG] Stream is now ACTIVE - isConnecting: false, isStreamActive: true")
+                }
+            case "error":
+                if let errorData = jsonArray[1] as? [String: Any],
+                   let errorMessage = errorData["message"] as? String {
+                    print("❌ [DEBUG] Server error: \(errorMessage)")
+                    DispatchQueue.main.async {
+                        self.connectionStatus = "Error: \(errorMessage)"
+                        self.isConnecting = false
+                    }
                 }
 
             case "stream_started":
@@ -2287,6 +2677,10 @@ struct LiveStreamPlayerView: View {
     }
 
     private func sendJoinAuction() {
+        print("📤 [DEBUG] ===== SEND JOIN AUCTION =====")
+        print("📤 [DEBUG] Auction ID: \(auctionId)")
+        print("📤 [DEBUG] WebSocket task status: \(webSocketTask != nil ? "present" : "nil")")
+
         // Socket.IO event format: 42["event_name", event_data]
         let eventData = [
             "auctionId": auctionId,
@@ -2295,22 +2689,30 @@ struct LiveStreamPlayerView: View {
 
         let eventArray: [Any] = ["join_auction", eventData]
 
+        print("📤 [DEBUG] Event data: \(eventData)")
+
         guard let jsonData = try? JSONSerialization.data(withJSONObject: eventArray),
               let jsonString = String(data: jsonData, encoding: .utf8) else {
-            print("❌ [LiveStreamPlayer] Failed to encode join_auction event")
+            print("❌ [DEBUG] Failed to encode join_auction event")
             return
         }
 
         let socketIOMessage = "42\(jsonString)"
 
+        print("📤 [DEBUG] Socket.IO message: \(socketIOMessage)")
+        print("📤 [DEBUG] About to send via WebSocket...")
+
         webSocketTask?.send(.string(socketIOMessage)) { error in
             if let error = error {
-                print("❌ [LiveStreamPlayer] Failed to send join_auction: \(error)")
+                print("❌ [DEBUG] Failed to send join_auction: \(error.localizedDescription)")
+                print("❌ [DEBUG] Send error details: \(error)")
             } else {
-                print("✅ [LiveStreamPlayer] Sent join_auction for: \(self.auctionId)")
-                print("📤 [LiveStreamPlayer] Message: \(socketIOMessage)")
+                print("✅ [DEBUG] Successfully sent join_auction for: \(self.auctionId)")
+                print("📤 [DEBUG] Message sent: \(socketIOMessage)")
             }
         }
+
+        print("📤 [DEBUG] ===== SEND JOIN AUCTION END =====")
     }
 
     private func sendQualityRequest(_ quality: String) {
@@ -2337,6 +2739,688 @@ struct LiveStreamPlayerView: View {
             } else {
                 print("✅ [LiveStreamPlayer] Quality request sent: \(quality)")
                 print("📤 [LiveStreamPlayer] Quality message: \(socketIOMessage)")
+            }
+        }
+    }
+}
+
+// MARK: - Live Auction Page
+// Full-screen live stream experience with floating overlays for items, chat, and bidding
+// Optimized for immersive auction viewing
+
+struct LiveAuctionPageView: View {
+    let auctionId: String
+
+    @StateObject private var auctionService = AuctionService.shared
+    @StateObject private var socketService = SocketService.shared
+    @Environment(\.presentationMode) var presentationMode
+
+    // Data State
+    @State private var auction: LiveAuction?
+    @State private var items: [AuctionItem] = []
+    @State private var currentItem: AuctionItem?
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+    @State private var cancellables = Set<AnyCancellable>()
+
+    // UI State - Overlays
+    // Items and chat overlay state removed
+    @State private var showingBiddingSheet = false
+    @State private var showingItemDetails = false
+    @State private var selectedDetailItem: AuctionItem?
+    // showingControls removed - controls always visible
+
+    // Real-time Updates
+    @State private var viewerCount = 0
+    @State private var connectionStatus = "Connecting..."
+
+    var body: some View {
+        ZStack {
+            // Full-screen background
+            Color.black
+                .ignoresSafeArea(.all)
+
+            if isLoading {
+                loadingView
+            } else if let error = errorMessage {
+                errorView(error)
+            } else if let auction = auction {
+                fullScreenAuctionView(auction)
+            }
+        }
+        .onAppear {
+            loadAuctionData()
+            setupRealTimeUpdates()
+        }
+        .onDisappear {
+            cleanup()
+        }
+        .sheet(isPresented: $showingBiddingSheet) {
+            if let _ = auction, let _ = currentItem {
+                Text("Bidding sheet would open here")
+                    .padding()
+            }
+        }
+        .sheet(isPresented: $showingItemDetails) {
+            if let item = selectedDetailItem {
+                ItemDetailSheet(item: item)
+            }
+        }
+    }
+
+    // MARK: - View Components
+
+    private var loadingView: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .scaleEffect(1.5)
+                .tint(.white)
+            Text("Loading auction...")
+                .font(.headline)
+                .foregroundColor(.white)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func errorView(_ error: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 48))
+                .foregroundColor(.orange)
+
+            Text("Failed to Load Auction")
+                .font(.headline)
+                .foregroundColor(.white)
+
+            Text(error)
+                .font(.subheadline)
+                .foregroundColor(.gray)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            Button("Try Again") {
+                loadAuctionData()
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 12)
+            .background(Color.blue)
+            .foregroundColor(.white)
+            .cornerRadius(8)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func fullScreenAuctionView(_ auction: LiveAuction) -> some View {
+        ZStack {
+            // Full-screen live stream (background layer)
+            WebRTCLiveStreamView(
+                auctionId: auctionId,
+                auctionTitle: auction.title
+            )
+            .ignoresSafeArea(.all)
+
+            // Floating overlays (foreground layer) - always visible
+            floatingControlsOverlay(auction)
+
+            // Items and chat overlays removed as requested
+        }
+    }
+
+    // MARK: - Floating Controls Overlay
+    private func floatingControlsOverlay(_ auction: LiveAuction) -> some View {
+        VStack {
+            // Top controls
+            topControlsBar(auction)
+
+            Spacer()
+
+            // Bottom controls
+            bottomControlsBar(auction)
+        }
+        .padding()
+    }
+
+    private func topControlsBar(_ auction: LiveAuction) -> some View {
+        HStack {
+            // Close button removed as requested
+
+            Spacer()
+
+            // Viewer count and status
+            HStack(spacing: 8) {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(auction.status == .live ? Color.red : Color.blue)
+                        .frame(width: 8, height: 8)
+                    Text(auction.status.displayName)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                }
+
+                HStack(spacing: 4) {
+                    Image(systemName: "eye.fill")
+                        .font(.caption)
+                    Text("\(viewerCount)")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                }
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+        }
+    }
+
+    private func bottomControlsBar(_ auction: LiveAuction) -> some View {
+        VStack(spacing: 16) {
+            // Current item info (if available)
+            if let item = currentItem {
+                currentItemFloatingBanner(item)
+            }
+
+            // Action buttons removed as requested (items, chat, bid)
+        }
+    }
+
+    private func currentItemFloatingBanner(_ item: AuctionItem) -> some View {
+        HStack(spacing: 12) {
+            // Item Thumbnail
+            if let imageUrl = item.primaryImageURL {
+                CachedImageView(
+                    url: URL(string: imageUrl),
+                    placeholder: { ProgressView().scaleEffect(0.5) },
+                    failureView: {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.gray.opacity(0.3))
+                            .overlay(
+                                Image(systemName: "photo")
+                                    .foregroundColor(.gray)
+                            )
+                    }
+                )
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 50, height: 50)
+                .clipped()
+                .cornerRadius(8)
+            }
+
+            // Item Info
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("🔴 LIVE")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.red)
+
+                    // Timer if available
+                    if let endTime = item.itemEndTime {
+                        AuctionTimerCompactView(endTime: endTime)
+                    }
+                }
+
+                Text(item.name)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .foregroundColor(.white)
+
+                HStack(spacing: 12) {
+                    Text("Current: $\(String(format: "%.0f", item.currentBid ?? item.startingPrice))")
+                        .font(.caption)
+                        .foregroundColor(.green)
+
+                    Text("Next: $\(String(format: "%.0f", item.nextMinimumBid))")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                }
+            }
+
+            Spacer()
+        }
+        .padding()
+        .background(Color.black.opacity(0.8))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.red.opacity(0.6), lineWidth: 1)
+        )
+    }
+
+    // MARK: - Overlay Views
+
+    // Items and chat overlay views removed as requested
+
+    // MARK: - Private Methods
+
+    private func loadAuctionData() {
+        print("🔍 [LiveAuctionPageView] Loading auction data for: \(auctionId)")
+
+        isLoading = true
+        errorMessage = nil
+
+        auctionService.getAuctionDetails(auctionId: auctionId)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    self.isLoading = false
+                    if case .failure(let error) = completion {
+                        self.errorMessage = error.localizedDescription
+                        print("❌ [LiveAuctionPageView] Error: \(error)")
+                    }
+                },
+                receiveValue: { (auctionData, itemsData) in
+                    print("✅ [LiveAuctionPageView] Loaded auction: \(auctionData.title)")
+                    self.auction = auctionData
+                    self.items = itemsData
+                    self.viewerCount = auctionData.currentViewers
+
+                    // Find current active item
+                    self.currentItem = itemsData.first { $0.isActive }
+                    print("🎯 [LiveAuctionPageView] Active item: \(self.currentItem?.name ?? "none")")
+                }
+            )
+            .store(in: &cancellables)
+    }
+
+    private func setupRealTimeUpdates() {
+        print("📡 [LiveAuctionPageView] Setting up real-time updates")
+
+        // Connect to auction
+        socketService.connectToAuction(auctionId)
+
+        // Connection status
+        socketService.$connectionStatus
+            .receive(on: DispatchQueue.main)
+            .sink { status in
+                self.connectionStatus = status
+            }
+            .store(in: &cancellables)
+
+        // Viewer count updates
+        socketService.onViewerCountUpdate { update in
+            DispatchQueue.main.async {
+                if update.auctionId == self.auctionId {
+                    self.viewerCount = update.viewerCount
+                }
+            }
+        }
+        .store(in: &cancellables)
+
+        // Bid updates
+        socketService.onBidUpdate { bidUpdate in
+            DispatchQueue.main.async {
+                if bidUpdate.auctionId == self.auctionId {
+                    self.updateItemBid(bidUpdate)
+                }
+            }
+        }
+        .store(in: &cancellables)
+
+        // Timer events (item changes)
+        socketService.onTimerEvent { timerEvent in
+            DispatchQueue.main.async {
+                if timerEvent.auctionId == self.auctionId {
+                    self.handleTimerEvent(timerEvent)
+                }
+            }
+        }
+        .store(in: &cancellables)
+    }
+
+    private func updateItemBid(_ bidUpdate: BidUpdateData) {
+        // Update item in items array
+        if let index = items.firstIndex(where: { $0._id == bidUpdate.itemId }) {
+            let updatedItem = items[index]
+            // Create a new item with updated bid (since AuctionItem properties might be let)
+            items[index] = AuctionItem(
+                _id: updatedItem._id,
+                auctionId: updatedItem.auctionId,
+                name: updatedItem.name,
+                description: updatedItem.description,
+                images: updatedItem.images,
+                startingPrice: updatedItem.startingPrice,
+                currentBid: bidUpdate.bidAmount,
+                bidIncrement: updatedItem.bidIncrement,
+                estimatedDuration: updatedItem.estimatedDuration,
+                itemEndTime: updatedItem.itemEndTime,
+                status: updatedItem.status,
+                winnerId: updatedItem.winnerId,
+                winningBid: updatedItem.winningBid,
+                bidCount: (updatedItem.bidCount ?? 0) + 1,
+                category: updatedItem.category,
+                condition: updatedItem.condition,
+                weight: updatedItem.weight,
+                dimensions: updatedItem.dimensions,
+                auctionOrder: updatedItem.auctionOrder
+            )
+
+            // Update current item if it's the same
+            if currentItem?._id == bidUpdate.itemId {
+                currentItem = items[index]
+            }
+        }
+
+        print("💰 [LiveAuctionPageView] Bid updated: \(bidUpdate.bidderName) - $\(bidUpdate.bidAmount)")
+    }
+
+    private func handleTimerEvent(_ timerEvent: TimerEvent) {
+        print("⏱️ [LiveAuctionPageView] Timer event: \(timerEvent.action) for item: \(timerEvent.itemId)")
+
+        switch timerEvent.action {
+        case "start":
+            // Update item status to active and set as current
+            if let index = items.firstIndex(where: { $0._id == timerEvent.itemId }) {
+                let updatedItem = items[index]
+                items[index] = AuctionItem(
+                    _id: updatedItem._id,
+                    auctionId: updatedItem.auctionId,
+                    name: updatedItem.name,
+                    description: updatedItem.description,
+                    images: updatedItem.images,
+                    startingPrice: updatedItem.startingPrice,
+                    currentBid: updatedItem.currentBid,
+                    bidIncrement: updatedItem.bidIncrement,
+                    estimatedDuration: updatedItem.estimatedDuration,
+                    itemEndTime: timerEvent.endTime,
+                    status: .active,
+                    winnerId: updatedItem.winnerId,
+                    winningBid: updatedItem.winningBid,
+                    bidCount: updatedItem.bidCount,
+                    category: updatedItem.category,
+                    condition: updatedItem.condition,
+                    weight: updatedItem.weight,
+                    dimensions: updatedItem.dimensions,
+                    auctionOrder: updatedItem.auctionOrder
+                )
+                currentItem = items[index]
+            }
+
+        case "end":
+            // Update item status to sold/unsold
+            if let index = items.firstIndex(where: { $0._id == timerEvent.itemId }) {
+                let updatedItem = items[index]
+                let finalStatus: AuctionItemStatus = (updatedItem.currentBid ?? 0) > updatedItem.startingPrice ? .sold : .unsold
+
+                items[index] = AuctionItem(
+                    _id: updatedItem._id,
+                    auctionId: updatedItem.auctionId,
+                    name: updatedItem.name,
+                    description: updatedItem.description,
+                    images: updatedItem.images,
+                    startingPrice: updatedItem.startingPrice,
+                    currentBid: updatedItem.currentBid,
+                    bidIncrement: updatedItem.bidIncrement,
+                    estimatedDuration: updatedItem.estimatedDuration,
+                    itemEndTime: updatedItem.itemEndTime,
+                    status: finalStatus,
+                    winnerId: updatedItem.winnerId,
+                    winningBid: updatedItem.winningBid,
+                    bidCount: updatedItem.bidCount,
+                    category: updatedItem.category,
+                    condition: updatedItem.condition,
+                    weight: updatedItem.weight,
+                    dimensions: updatedItem.dimensions,
+                    auctionOrder: updatedItem.auctionOrder
+                )
+
+                // Clear current item if this was it
+                if currentItem?._id == timerEvent.itemId {
+                    currentItem = nil
+                }
+            }
+
+        default:
+            break
+        }
+    }
+
+    private func cleanup() {
+        print("🧹 [LiveAuctionPageView] Cleaning up")
+        cancellables.removeAll()
+    }
+}
+
+// MARK: - Helper Components
+
+struct AuctionTimerCompactView: View {
+    let endTime: String
+    @State private var timeRemaining: String = ""
+    @State private var timer: Timer?
+
+    var body: some View {
+        Text(timeRemaining)
+            .font(.caption2)
+            .fontWeight(.medium)
+            .foregroundColor(.orange)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.orange.opacity(0.2))
+            .cornerRadius(4)
+            .onAppear {
+                startTimer()
+            }
+            .onDisappear {
+                timer?.invalidate()
+            }
+    }
+
+    private func startTimer() {
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            updateTimeRemaining()
+        }
+        updateTimeRemaining()
+    }
+
+    private func updateTimeRemaining() {
+        let formatter = ISO8601DateFormatter()
+        guard let endDate = formatter.date(from: endTime) else {
+            timeRemaining = "--:--"
+            return
+        }
+
+        let now = Date()
+        let interval = endDate.timeIntervalSince(now)
+
+        if interval <= 0 {
+            timeRemaining = "ENDED"
+            timer?.invalidate()
+            return
+        }
+
+        let minutes = Int(interval) / 60
+        let seconds = Int(interval) % 60
+        timeRemaining = String(format: "%02d:%02d", minutes, seconds)
+    }
+}
+
+// MARK: - Supporting Views for Live Auction
+
+struct AuctionItemRowViewLive: View {
+    let item: AuctionItem
+    let isActive: Bool
+    let isDarkMode: Bool
+    let onTap: () -> Void
+    let onBidTap: () -> Void
+
+    init(item: AuctionItem, isActive: Bool, isDarkMode: Bool = false, onTap: @escaping () -> Void, onBidTap: @escaping () -> Void) {
+        self.item = item
+        self.isActive = isActive
+        self.isDarkMode = isDarkMode
+        self.onTap = onTap
+        self.onBidTap = onBidTap
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                // Item Image
+                if let imageUrl = item.primaryImageURL {
+                    CachedImageView(
+                        url: URL(string: imageUrl),
+                        placeholder: { ProgressView().scaleEffect(0.5) },
+                        failureView: {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.gray.opacity(0.3))
+                                .overlay(Image(systemName: "photo"))
+                        }
+                    )
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 80, height: 80)
+                    .clipped()
+                    .cornerRadius(8)
+                }
+
+                // Item Details
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(item.name)
+                            .font(.headline)
+                            .lineLimit(1)
+                            .foregroundColor(isDarkMode ? .white : .primary)
+
+                        Spacer()
+
+                        statusBadge(item.status)
+                    }
+
+                    Text("Current: $\(String(format: "%.0f", item.currentBid ?? item.startingPrice))")
+                        .font(.subheadline)
+                        .foregroundColor(.green)
+
+                    if isActive {
+                        Text("🔴 LIVE BIDDING NOW")
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .foregroundColor(.red)
+                    }
+                }
+
+                if item.isActive {
+                    Button("Bid") {
+                        onBidTap()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                    .font(.caption)
+                }
+            }
+            .padding()
+            .background(
+                isActive ?
+                Color.blue.opacity(isDarkMode ? 0.3 : 0.1) :
+                (isDarkMode ? Color.white.opacity(0.1) : Color(.systemBackground))
+            )
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isActive ? Color.blue : Color.clear, lineWidth: 2)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+
+    private func statusBadge(_ status: AuctionItemStatus) -> some View {
+        Text(status.displayName)
+            .font(.caption2)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(statusColor(status).opacity(0.2))
+            .foregroundColor(statusColor(status))
+            .cornerRadius(4)
+    }
+
+    private func statusColor(_ status: AuctionItemStatus) -> Color {
+        switch status {
+        case .active: return .green
+        case .pending: return .blue
+        case .sold: return .purple
+        case .unsold: return .gray
+        }
+    }
+}
+
+struct ItemDetailSheet: View {
+    let item: AuctionItem
+    @Environment(\.presentationMode) var presentationMode
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Item Images
+                    if !item.images.isEmpty {
+                        TabView {
+                            ForEach(item.images, id: \.self) { imageUrl in
+                                CachedImageView(
+                                    url: URL(string: imageUrl),
+                                    placeholder: { ProgressView() },
+                                    failureView: { Rectangle().fill(Color.gray.opacity(0.3)) }
+                                )
+                                .aspectRatio(contentMode: .fit)
+                            }
+                        }
+                        .tabViewStyle(PageTabViewStyle())
+                        .frame(height: 250)
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(item.name)
+                            .font(.title2)
+                            .fontWeight(.bold)
+
+                        Text(item.description)
+                            .font(.body)
+
+                        if let category = item.category {
+                            Label(category, systemImage: "tag")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Divider()
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Pricing Information")
+                                .font(.headline)
+
+                            HStack {
+                                VStack(alignment: .leading) {
+                                    Text("Starting Price")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    Text("$\(String(format: "%.0f", item.startingPrice))")
+                                        .font(.title3)
+                                        .fontWeight(.semibold)
+                                }
+
+                                Spacer()
+
+                                VStack(alignment: .trailing) {
+                                    Text("Current Bid")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    Text("$\(String(format: "%.0f", item.currentBid ?? item.startingPrice))")
+                                        .font(.title3)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.green)
+                                }
+                            }
+                        }
+                    }
+                    .padding()
+                }
+            }
+            .navigationTitle("Item Details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                }
             }
         }
     }

@@ -93,25 +93,12 @@ class AuctionService: ObservableObject {
         return apiService.performRequest(
             endpoint: "/auction/\(auctionId)",
             method: .GET,
-            responseType: AuctionDetailsResponse.self
+            responseType: AuctionDetailsArrayResponse.self
         )
         .tryMap { response in
             print("✅ [AuctionService] Received auction details response:")
             print("📊 [AuctionService] Success: \(response.success)")
             print("📋 [AuctionService] Message: \(response.message ?? "nil")")
-            print("🎯 [AuctionService] Auction Title: \(response.auction.title)")
-            print("📈 [AuctionService] Auction Status: \(response.auction.status.displayName)")
-            print("👥 [AuctionService] Current Viewers: \(response.auction.currentViewers)")
-            print("📦 [AuctionService] Items count: \(response.items.count)")
-
-            if response.items.isEmpty {
-                print("⚠️ [AuctionService] No items found in auction!")
-            } else {
-                for (index, item) in response.items.enumerated() {
-                    print("🎯 [AuctionService] Item \(index + 1): \(item.name) - Status: \(item.status.displayName)")
-                    print("💰 [AuctionService] Current Bid: \(item.currentBid ?? 0)")
-                }
-            }
 
             guard response.success else {
                 let errorMsg = response.message ?? "Failed to fetch auction details"
@@ -119,8 +106,38 @@ class AuctionService: ObservableObject {
                 throw APIError.serverError(errorMsg)
             }
 
-            print("📡 [AuctionService] Successfully fetched auction '\(response.auction.title)' with \(response.items.count) items")
-            return (response.auction, response.items)
+            // Handle both response formats: single auction or auctions array
+            let auction: LiveAuction
+            let items: [AuctionItem]
+
+            if let auctionsArray = response.auctions, !auctionsArray.isEmpty {
+                // Format 1: Response has auctions array
+                print("🔢 [AuctionService] Found auctions array with \(auctionsArray.count) auctions")
+                guard let foundAuction = auctionsArray.first(where: { $0._id == auctionId }) ?? auctionsArray.first else {
+                    print("❌ [AuctionService] No auction found with ID: \(auctionId)")
+                    throw APIError.serverError("Auction not found")
+                }
+                auction = foundAuction
+                items = []
+                print("✅ [AuctionService] Using auction from auctions array")
+            } else if let singleAuction = response.auction {
+                // Format 2: Response has single auction object
+                print("🎯 [AuctionService] Found single auction object")
+                auction = singleAuction
+                items = response.items ?? []
+                print("✅ [AuctionService] Using single auction with \(items.count) items")
+            } else {
+                print("❌ [AuctionService] No auction data found in response")
+                throw APIError.serverError("No auction data in response")
+            }
+
+            print("🎯 [AuctionService] Final Auction Title: \(auction.title)")
+            print("📈 [AuctionService] Auction Status: \(auction.status.displayName)")
+            print("👥 [AuctionService] Current Viewers: \(auction.currentViewers)")
+            print("📦 [AuctionService] Items count: \(items.count)")
+
+            print("📡 [AuctionService] Successfully fetched auction '\(auction.title)' with \(items.count) items")
+            return (auction, items)
         }
         .mapError { error in
             print("💥 [AuctionService] Error in getAuctionDetails() for auction \(auctionId):")

@@ -170,10 +170,6 @@ struct WebRTCVideoView: View {
 
                     Spacer()
 
-                    // Viewer Controls Header (Right) - Viewer count with minimize
-                    viewerControlsInline
-                        .padding(.trailing, 20)
-                        .padding(.top, 32)
                 }
                 Spacer()
             }
@@ -579,50 +575,6 @@ struct WebRTCVideoView: View {
         .padding(8)
     }
 
-    // MARK: - Viewer Controls (Inline)
-
-    private var viewerControlsInline: some View {
-        HStack(spacing: 12) {
-            // Viewer Count Section
-            HStack(spacing: 6) {
-                // Eye/Viewer icon with red live indicator
-                ZStack {
-                    // Red live background
-                    Circle()
-                        .fill(Color.red)
-                        .frame(width: 32, height: 32)
-
-                    // Viewer icon
-                    Image(systemName: "eye.fill")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.white)
-                }
-
-                // Viewer count
-                Text("462")
-                    .font(.system(.headline, design: .default).weight(.bold))
-                    .foregroundColor(.white)
-                    .shadow(color: .black, radius: 1, x: 0, y: 0)
-            }
-
-            // Minimize/Expand Button
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    isMinimized.toggle()
-                }
-                print("📱 [ViewerControls] Minimize button tapped - isMinimized: \(isMinimized)")
-            }) {
-                Image(systemName: isMinimized ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.white)
-                    .frame(width: 28, height: 28)
-                    .shadow(color: .black, radius: 1, x: 0, y: 0)
-            }
-            .scaleEffect(isMinimized ? 0.9 : 1.0)
-            .animation(.easeInOut(duration: 0.2), value: isMinimized)
-        }
-        .padding(8)
-    }
 
     // MARK: - Right-side Controls (Inline)
 

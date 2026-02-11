@@ -25,6 +25,7 @@ struct LiveAuctionPageView: View {
     @State private var showingItemDetails = false
     @State private var selectedDetailItem: AuctionItem?
     @State private var showingControls = true
+    @State private var isMinimized = false
 
     // Right-side control sheet states
     @State private var showingMoreSheet = false
@@ -200,10 +201,12 @@ struct LiveAuctionPageView: View {
 
                     // Down arrow button
                     Button(action: {
-                        // Action for down arrow (minimize/expand functionality)
-                        print("📱 Down arrow tapped")
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            isMinimized.toggle()
+                        }
+                        print("📱 Down arrow tapped - isMinimized: \(isMinimized)")
                     }) {
-                        Image(systemName: "chevron.down")
+                        Image(systemName: isMinimized ? "chevron.up" : "chevron.down")
                             .font(.caption)
                             .foregroundColor(.white)
                             .shadow(color: .black, radius: 1, x: 0, y: 0)

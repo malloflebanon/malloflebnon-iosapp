@@ -143,7 +143,7 @@ struct WebRTCVideoView: View {
 
             // Video controls overlay removed
 
-            // Seller Info and Viewer Controls Header
+            // Top overlay with seller info
             VStack {
                 HStack {
                     // Seller Info Header (Left) - Inline implementation
@@ -152,11 +152,17 @@ struct WebRTCVideoView: View {
                         .padding(.top, 32)
 
                     Spacer()
+                }
+                Spacer()
+            }
 
-                    // Right-side controls
+            // Right-side controls positioned in middle-right
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
                     rightSideControlsInline
                         .padding(.trailing, 20)
-                        .padding(.top, 32)
                 }
                 Spacer()
             }

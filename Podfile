@@ -10,6 +10,9 @@ target 'MallOfLebanon-iOS' do
   # Socket.IO for real-time auction communication
   pod 'Socket.IO-Client-Swift', '~> 16.0'
 
+  # WebRTC for live streaming
+  pod 'GoogleWebRTC', '~> 1.1'
+
   # Additional pods for enhanced functionality
   pod 'SDWebImage', '~> 5.0' # For enhanced image loading and caching
 

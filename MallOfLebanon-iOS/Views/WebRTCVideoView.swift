@@ -19,6 +19,7 @@ struct WebRTCVideoView: View {
     @State private var isLocalAudioMuted = false
     @State private var selectedQuality = "hd"
     @State private var showQualityMenu = false
+    @State private var isMinimized = false
 
     var body: some View {
         ZStack {
@@ -122,27 +123,44 @@ struct WebRTCVideoView: View {
     private var videoStreamingInterface: some View {
         ZStack {
             // Remote video with custom sizing (19:20:10:80)
-            remoteVideoView
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .ignoresSafeArea(.all)
-                .clipped()
-
-            // Local video preview (small overlay)
-            VStack {
-                HStack {
+            if isMinimized {
+                VStack {
+                    HStack {
+                        Spacer()
+                        remoteVideoView
+                            .frame(width: 150, height: 100)
+                            .cornerRadius(8)
+                            .shadow(radius: 4)
+                            .padding()
+                    }
                     Spacer()
-                    localVideoPreview
-                        .frame(width: 120, height: 90)
-                        .cornerRadius(12)
-                        .shadow(radius: 8)
-                        .padding()
                 }
-                Spacer()
+                .transition(.scale.combined(with: .opacity))
+            } else {
+                remoteVideoView
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .ignoresSafeArea(.all)
+                    .clipped()
+            }
+
+            // Local video preview (small overlay) - hide when minimized
+            if !isMinimized {
+                VStack {
+                    HStack {
+                        Spacer()
+                        localVideoPreview
+                            .frame(width: 120, height: 90)
+                            .cornerRadius(12)
+                            .shadow(radius: 8)
+                            .padding()
+                    }
+                    Spacer()
+                }
             }
 
             // Video controls overlay removed
 
-            // Top overlay with seller info
+            // Top overlay with seller info and viewer controls
             VStack {
                 HStack {
                     // Seller Info Header (Left) - Inline implementation
@@ -151,22 +169,30 @@ struct WebRTCVideoView: View {
                         .padding(.top, 32)
 
                     Spacer()
+
+                    // Viewer Controls Header (Right) - Viewer count with minimize
+                    viewerControlsInline
+                        .padding(.trailing, 20)
+                        .padding(.top, 32)
                 }
                 Spacer()
             }
 
-            // Right-side controls positioned in lower-middle-right
-            VStack {
-                Spacer()
-                Spacer()
-                Spacer() // Push controls even further down
-                HStack {
+            // Right-side controls positioned in lower-middle-right - hide when minimized
+            if !isMinimized {
+                VStack {
                     Spacer()
-                    rightSideControlsInline
-                        .padding(.trailing, 20)
+                    Spacer()
+                    Spacer()
+                    Spacer() // Push controls even more down
+                    HStack {
+                        Spacer()
+                        rightSideControlsInline
+                            .padding(.trailing, 20)
+                    }
+                    Spacer()
+                    Spacer() // Add bottom spacer for better positioning
                 }
-                Spacer()
-                Spacer() // Add bottom spacer for better positioning
             }
 
             // Quality menu overlay removed
@@ -553,31 +579,49 @@ struct WebRTCVideoView: View {
         .padding(8)
     }
 
-    // MARK: - Viewer Controls Header (Inline)
+    // MARK: - Viewer Controls (Inline)
 
-    private var viewerControlsHeaderInline: some View {
-        HStack(spacing: 6) {
-            // Red live indicator
-            Circle()
-                .fill(Color.red)
-                .frame(width: 8, height: 8)
+    private var viewerControlsInline: some View {
+        HStack(spacing: 12) {
+            // Viewer Count Section
+            HStack(spacing: 6) {
+                // Eye/Viewer icon with red live indicator
+                ZStack {
+                    // Red live background
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 32, height: 32)
 
-            // "Live" text (no viewer count number)
-            Text("Live Now")
-                .font(.system(.caption, design: .default).weight(.medium))
-                .foregroundColor(.white)
-                .shadow(color: .black, radius: 1, x: 0, y: 0)
+                    // Viewer icon
+                    Image(systemName: "eye.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white)
+                }
 
-            // Minimize/Down Arrow Button next to live indicator
-            Button(action: {
-                print("📱 Minimize screen tapped")
-            }) {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 12, weight: .bold))
+                // Viewer count
+                Text("462")
+                    .font(.system(.headline, design: .default).weight(.bold))
                     .foregroundColor(.white)
                     .shadow(color: .black, radius: 1, x: 0, y: 0)
             }
+
+            // Minimize/Expand Button
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    isMinimized.toggle()
+                }
+                print("📱 [ViewerControls] Minimize button tapped - isMinimized: \(isMinimized)")
+            }) {
+                Image(systemName: isMinimized ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(width: 28, height: 28)
+                    .shadow(color: .black, radius: 1, x: 0, y: 0)
+            }
+            .scaleEffect(isMinimized ? 0.9 : 1.0)
+            .animation(.easeInOut(duration: 0.2), value: isMinimized)
         }
+        .padding(8)
     }
 
     // MARK: - Right-side Controls (Inline)

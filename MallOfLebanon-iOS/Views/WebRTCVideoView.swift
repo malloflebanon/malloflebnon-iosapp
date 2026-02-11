@@ -268,14 +268,10 @@ struct WebRTCVideoView: View {
 
     private var localVideoPreview: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.black)
-
             if webRTCService.isStreaming {
                 WebRTCVideoRenderer(videoTrack: nil, isLocal: true)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             }
-
         }
     }
 

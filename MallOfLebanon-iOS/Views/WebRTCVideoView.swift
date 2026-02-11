@@ -227,52 +227,6 @@ struct WebRTCVideoView: View {
                             y: 19 + (geometry.size.height - 19 - 10) / 2
                         )
                         .clipped()
-                        .overlay(
-                            VStack {
-                                Spacer()
-                                HStack {
-                                    HStack(spacing: 6) {
-                                        // Eye icon with viewer count
-                                        Image(systemName: "eye.fill")
-                                            .font(.caption)
-                                            .foregroundColor(.white)
-
-                                        Text("Live Now")
-                                            .font(.caption)
-                                            .foregroundColor(.white)
-
-                                        Text("0")
-                                            .font(.caption)
-                                            .foregroundColor(.white)
-                                            .fontWeight(.medium)
-
-                                        // Down arrow button
-                                        Button(action: {
-                                            withAnimation(.easeInOut(duration: 0.3)) {
-                                                isMinimized.toggle()
-                                            }
-                                            print("📱 Down arrow tapped - isMinimized: \(isMinimized)")
-                                        }) {
-                                            Image(systemName: isMinimized ? "chevron.up" : "chevron.down")
-                                                .font(.system(size: 12, weight: .bold))
-                                                .foregroundColor(.white)
-                                                .frame(width: 20, height: 20)
-                                                .background(
-                                                    Circle()
-                                                        .fill(Color.black.opacity(0.3))
-                                                )
-                                        }
-                                    }
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.green.opacity(0.8))
-                                    .cornerRadius(4)
-
-                                    Spacer()
-                                }
-                                .padding()
-                            }
-                        )
                 }
 
                 // Connection loader
@@ -590,12 +544,12 @@ struct WebRTCVideoView: View {
                             Text("Follow")
                                 .font(.caption2)
                                 .fontWeight(.semibold)
-                                .foregroundColor(.black)
+                                .foregroundColor(.white)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 4)
                                 .background(
                                     RoundedRectangle(cornerRadius: 8)
-                                        .fill(Color.yellow)
+                                        .fill(Color.orange)
                                 )
                         }
                     }

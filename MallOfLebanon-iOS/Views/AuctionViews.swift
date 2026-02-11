@@ -3047,10 +3047,6 @@ struct LiveAuctionPageView: View {
             .padding(.bottom, 12)
             .padding(.top, 8)
         }
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.black.opacity(0.8))
-        )
         .padding(.horizontal, 8)
         .padding(.bottom, 0)
     }

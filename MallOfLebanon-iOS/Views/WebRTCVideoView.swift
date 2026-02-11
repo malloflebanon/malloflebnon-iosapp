@@ -153,7 +153,10 @@ struct WebRTCVideoView: View {
 
                     Spacer()
 
-                    // Right-side controls removed - handled in parent view
+                    // Right-side controls
+                    rightSideControlsInline
+                        .padding(.trailing, 20)
+                        .padding(.top, 32)
                 }
                 Spacer()
             }
@@ -669,7 +672,6 @@ struct WebRTCVideoView: View {
                 }
             }
         }
-        .background(Color.red.opacity(0.3)) // Temporary debug background
         .onAppear {
             print("🎯 [DEBUG] Right-side controls in WebRTC view appeared")
         }

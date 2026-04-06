@@ -552,6 +552,7 @@ struct EnhancedBiddingView_Previews: PreviewProvider {
             bidIncrement: 1000,
             estimatedDuration: 300,
             itemEndTime: nil,
+            remainingSeconds: nil, // Will be filled from backend
             status: .active,
             winnerId: nil,
             winningBid: nil,

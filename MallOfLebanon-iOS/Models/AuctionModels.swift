@@ -97,6 +97,7 @@ struct AuctionItem: Codable, Identifiable {
     let bidIncrement: Double
     let estimatedDuration: Int?
     let itemEndTime: String?
+    let remainingSeconds: Int?
     let status: AuctionItemStatus
     let winnerId: String?
     let winningBid: Double?
@@ -123,7 +124,7 @@ struct AuctionItem: Codable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case _id, auctionId, name, description, images, startingPrice
-        case currentBid, bidIncrement, estimatedDuration, itemEndTime
+        case currentBid, bidIncrement, estimatedDuration, itemEndTime, remainingSeconds
         case status, winnerId, winningBid, bidCount, category, condition
         case weight, dimensions, auctionOrder
     }
@@ -417,6 +418,23 @@ extension AuctionItem {
 
     var hasBids: Bool {
         return (bidCount ?? 0) > 0
+    }
+
+    // Display price that handles 0 currentBid properly
+    var displayPrice: Double {
+        print("🔍 [AuctionItem] displayPrice calculation for '\(name)':")
+        print("🔍 [AuctionItem] - currentBid: \(currentBid ?? -999)")
+        print("🔍 [AuctionItem] - startingPrice: \(startingPrice)")
+
+        // If currentBid exists and is greater than 0, use it
+        if let bid = currentBid, bid > 0 {
+            print("🔍 [AuctionItem] Using currentBid: \(bid)")
+            return bid
+        }
+
+        // Otherwise, use startingPrice (handles both nil currentBid and 0 currentBid)
+        print("🔍 [AuctionItem] Using startingPrice: \(startingPrice)")
+        return startingPrice
     }
 }
 

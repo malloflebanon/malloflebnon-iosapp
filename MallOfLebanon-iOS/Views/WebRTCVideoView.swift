@@ -202,73 +202,81 @@ struct WebRTCVideoView: View {
     private var remoteVideoView: some View {
         GeometryReader { geometry in
             ZStack {
-                // WebRTC Remote Video Renderer with custom sizing (19:20:10:80)
-                WebRTCVideoRenderer(videoTrack: webRTCService.remoteVideoTrack, isLocal: false)
-                    .frame(
-                        width: geometry.size.width - 20 - 80,  // Subtract leading(20) and trailing(80)
-                        height: geometry.size.height - 19 - 10  // Subtract top(19) and bottom(10)
-                    )
-                    .position(
-                        x: 20 + (geometry.size.width - 20 - 80) / 2,  // Center in available width
-                        y: 19 + (geometry.size.height - 19 - 10) / 2   // Center in available height
-                    )
+                // BLACK BACKGROUND - Always present
+                Color.black
+                    .frame(width: geometry.size.width, height: geometry.size.height)
 
-                // Live Frame Fallback with custom sizing (19:20:10:80)
+                // PRIORITY 1: Live Frame Display (Image-based streaming from CRM admin)
                 if let liveFrame = webRTCService.currentLiveFrame {
                     Image(uiImage: liveFrame)
                         .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(
-                            width: geometry.size.width - 20 - 80,  // Custom width
-                            height: geometry.size.height - 19 - 10  // Custom height
-                        )
-                        .position(
-                            x: 20 + (geometry.size.width - 20 - 80) / 2,  // Custom positioning
-                            y: 19 + (geometry.size.height - 19 - 10) / 2
-                        )
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .background(Color.black)
+                        .zIndex(100) // Highest priority
+                }
+                // PRIORITY 2: WebRTC Video (only if no live frames available)
+                else if webRTCService.remoteVideoTrack != nil && webRTCService.isConnected {
+                    WebRTCVideoRenderer(videoTrack: webRTCService.remoteVideoTrack, isLocal: false)
+                        .frame(width: geometry.size.width, height: geometry.size.height)
                         .clipped()
+                        .background(Color.black)
+                        .zIndex(50)
                 }
 
-                // Connection loader
-                if webRTCService.currentLiveFrame == nil && !webRTCService.isConnected {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        .scaleEffect(1.5)
+                // Connection status overlays
+                if webRTCService.currentLiveFrame == nil && webRTCService.remoteVideoTrack == nil {
+                    // Show loading only if we have no content at all
+                    if webRTCService.connectionState == .connecting || webRTCService.connectionState == .new {
+                        VStack(spacing: 16) {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(1.5)
+
+                            Text("Connecting to live stream...")
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.8))
+                        }
                         .position(
                             x: geometry.size.width / 2,
                             y: geometry.size.height / 2
                         )
-                } else if webRTCService.currentLiveFrame == nil && webRTCService.connectionState == .failed {
-                    VStack(spacing: 16) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 40))
-                            .foregroundColor(.red.opacity(0.7))
-
-                        VStack(spacing: 8) {
-                            Text("Connection Failed")
-                                .font(.headline)
-                                .foregroundColor(.white)
-
-                            Text("Unable to connect to the stream. Tap to retry.")
-                                .font(.subheadline)
-                                .foregroundColor(.white.opacity(0.8))
-                                .multilineTextAlignment(.center)
-                        }
-
-                        Button("Retry Connection") {
-                            // Retry connection
-                            webRTCService.startWebRTC(auctionId: auctionId, isSellerMode: isSellerMode)
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 10)
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
+                        .zIndex(10)
                     }
-                    .position(
-                        x: geometry.size.width / 2,
-                        y: geometry.size.height / 2
-                    )
+                    // Show error state only after reasonable wait time and no live frames
+                    else if webRTCService.connectionState == .failed {
+                        VStack(spacing: 16) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 40))
+                                .foregroundColor(.red.opacity(0.7))
+
+                            VStack(spacing: 8) {
+                                Text("Stream Unavailable")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+
+                                Text("Waiting for seller to start streaming...")
+                                    .font(.subheadline)
+                                    .foregroundColor(.white.opacity(0.8))
+                                    .multilineTextAlignment(.center)
+                            }
+
+                            Button("Refresh") {
+                                // Refresh connection (less aggressive than full restart)
+                                webRTCService.startWebRTC(auctionId: auctionId, isSellerMode: isSellerMode)
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 10)
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
+                        }
+                        .position(
+                            x: geometry.size.width / 2,
+                            y: geometry.size.height / 2
+                        )
+                        .zIndex(10)
+                    }
                 }
             }
         }
@@ -426,6 +434,11 @@ struct WebRTCVideoView: View {
         print("🎬 [WebRTCVideoView] Starting WebRTC for auction: \(auctionId)")
         print("🎬 [WebRTCVideoView] Is seller mode: \(isSellerMode)")
         print("🎬 [WebRTCVideoView] WebRTC service current state: \(webRTCService.connectionState)")
+
+        // Check if we already have live frames - if so, WebRTC is less critical
+        if let currentFrame = webRTCService.currentLiveFrame {
+            print("✅ [WebRTCVideoView] Live frames already available, WebRTC will run in background")
+        }
 
         webRTCService.startWebRTC(auctionId: auctionId, isSellerMode: isSellerMode)
 
@@ -675,11 +688,11 @@ struct WebRTCVideoRenderer: UIViewRepresentable {
 
     func makeUIView(context: Context) -> RTCMTLVideoView {
         let videoView = RTCMTLVideoView(frame: .zero)
-        // Custom sizing configuration (19:20:10:80)
-        videoView.videoContentMode = .scaleAspectFill
+        // Zoomed out display configuration - fit entire video in view
+        videoView.videoContentMode = .scaleAspectFit
         videoView.clipsToBounds = true
-        videoView.backgroundColor = UIColor.clear
-        videoView.contentMode = .scaleAspectFill
+        videoView.backgroundColor = UIColor.black
+        videoView.contentMode = .scaleAspectFit
 
         // Custom constraints for 19:20:10:80 sizing
         videoView.translatesAutoresizingMaskIntoConstraints = false
@@ -694,6 +707,13 @@ struct WebRTCVideoRenderer: UIViewRepresentable {
     func updateUIView(_ uiView: RTCMTLVideoView, context: Context) {
         if let videoTrack = videoTrack {
             videoTrack.add(uiView)
+
+            // Standard frame setup
+            DispatchQueue.main.async {
+                uiView.frame = uiView.superview?.bounds ?? uiView.frame
+                uiView.setNeedsLayout()
+                uiView.layoutIfNeeded()
+            }
         }
     }
 }

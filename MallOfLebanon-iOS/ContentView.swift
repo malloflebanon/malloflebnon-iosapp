@@ -263,7 +263,8 @@ struct MainAppView: View {
                     Text("Products")
                 }
 
-            Text("Search")
+            SearchView()
+                .environmentObject(cartManager)
                 .tabItem {
                     Image(systemName: "magnifyingglass")
                     Text("Search")

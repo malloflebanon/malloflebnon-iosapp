@@ -48,7 +48,9 @@ class AuthenticationManager: ObservableObject {
                             return
                         }
 
-                        self?.handleSuccessfulAuth(user: response.user, token: response.token)
+                        // Use token if provided, otherwise use a placeholder or handle session-based auth
+                        let authToken = response.token ?? "session_auth"
+                        self?.handleSuccessfulAuth(user: response.user, token: authToken)
                     } else {
                         self?.errorMessage = response.message
                     }
@@ -95,7 +97,9 @@ class AuthenticationManager: ObservableObject {
                     self?.welcomeEmailSent = true
                     self?.showEmailConfirmation = true
 
-                    self?.handleSuccessfulAuth(user: response.user, token: response.token)
+                    // Use token if provided, otherwise use a placeholder or handle session-based auth
+                    let authToken = response.token ?? "session_auth"
+                    self?.handleSuccessfulAuth(user: response.user, token: authToken)
                 } else {
                     self?.errorMessage = response.message
                 }
@@ -148,15 +152,19 @@ class AuthenticationManager: ObservableObject {
 
     // MARK: - Helper Methods
     private func handleSuccessfulAuth(user: User, token: String) {
+        print("🎯 [AuthManager] handleSuccessfulAuth called with token: \(token)")
         self.currentUser = user
         self.isAuthenticated = true
         self.errorMessage = nil
 
         // Save token securely
+        print("💾 [AuthManager] About to save token to keychain")
         KeychainManager.shared.saveToken(token)
+        print("✅ [AuthManager] Token saved to keychain")
 
         // Save user data
         saveUserData(user)
+        print("🔑 [AuthManager] Authentication state updated - isAuthenticated: \(self.isAuthenticated)")
     }
 
     private func saveUserData(_ user: User) {

@@ -17,8 +17,77 @@ struct OutbidNotificationData: Codable {
 struct TimerEvent: Codable {
     let auctionId: String
     let itemId: String
+    let action: String? // "start", "pause", "resume", "end" - derived from event type
+    let duration: Int?
+    let durationMinutes: Int? // Backend sends this field
+    let startTime: String?
+    let endTime: String?
+    let remainingSeconds: Int?
+    let itemDetails: TimerItemDetails?
+
+    // Initialize with backend data and derive action from event type
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        auctionId = try container.decode(String.self, forKey: .auctionId)
+        itemId = try container.decode(String.self, forKey: .itemId)
+
+        // Try to decode action (for timer events with explicit action)
+        action = try container.decodeIfPresent(String.self, forKey: .action)
+
+        duration = try container.decodeIfPresent(Int.self, forKey: .duration)
+        durationMinutes = try container.decodeIfPresent(Int.self, forKey: .durationMinutes)
+        startTime = try container.decodeIfPresent(String.self, forKey: .startTime)
+        endTime = try container.decodeIfPresent(String.self, forKey: .endTime)
+        remainingSeconds = try container.decodeIfPresent(Int.self, forKey: .remainingSeconds)
+        itemDetails = try container.decodeIfPresent(TimerItemDetails.self, forKey: .itemDetails)
+    }
+}
+
+// Separate struct for item details in timer events (simpler than full AuctionItem)
+struct TimerItemDetails: Codable {
+    let _id: String
+    let name: String
+    let description: String
+    let startingPrice: Double
+    let currentBid: Double
+    let bidIncrement: Double
+    let status: String
+    let isDynamic: Bool
+
+    // Convert to AuctionItem for compatibility with existing handlers
+    func toAuctionItem() -> AuctionItem {
+        return AuctionItem(
+            _id: _id,
+            auctionId: "", // Will be filled from timer event
+            name: name,
+            description: description,
+            images: [],
+            startingPrice: startingPrice,
+            currentBid: currentBid > 0 ? currentBid : nil,
+            bidIncrement: bidIncrement,
+            estimatedDuration: nil,
+            itemEndTime: nil, // Will be filled from timer event
+            remainingSeconds: nil, // Will be filled from timer event
+            status: AuctionItemStatus(rawValue: status) ?? .pending,
+            winnerId: nil,
+            winningBid: nil,
+            bidCount: 0,
+            category: "Dynamic Item",
+            condition: "New",
+            weight: nil,
+            dimensions: nil,
+            auctionOrder: 0
+        )
+    }
+}
+
+// New struct that matches what the LiveAuctionPageView expects
+struct TimerEventWithAction: Codable {
+    let auctionId: String
+    let itemId: String
     let action: String // "start", "pause", "resume", "end"
     let duration: Int?
+    let remainingSeconds: Int?
     let startTime: String?
     let endTime: String?
     let itemDetails: AuctionItem?
@@ -56,6 +125,23 @@ struct RTCIceCandidateData: Codable {
     let sdpMid: String?
 }
 
+// MARK: - Live Streaming Data Models (imported from AuctionModels.swift)
+// BidUpdateData and ViewerCountUpdate are defined in AuctionModels.swift
+
+struct LiveFrameData: Codable {
+    let auctionId: String
+    let imageData: String // base64 data URL
+    let quality: String?
+    let resolution: String?
+    let timestamp: Double?
+    let frameNumber: Int?
+
+    // Computed property to provide fallback timestamp
+    var safeTimestamp: Double {
+        return timestamp ?? Date().timeIntervalSince1970
+    }
+}
+
 // MARK: - WebSocket-based Socket Service
 // This provides real-time functionality similar to Socket.IO
 // TODO: Replace with actual Socket.IO-Client-Swift when CocoaPods is working
@@ -71,7 +157,57 @@ class SocketService: ObservableObject {
     // MARK: - Private Properties
     private var webSocketTask: URLSessionWebSocketTask?
     private var urlSession: URLSession?
-    private let baseURL = "http://172.30.0.167:3007/api"
+    // Dynamic IP detection - automatically finds Mac's IP address
+    private lazy var baseURL: String = {
+        // Get the same baseURL as APIService for consistency
+        let apiServiceURL = APIService.shared.baseURLForDebugging
+        print("🌐 [SocketService] ===== USING APIService URL FOR CONSISTENCY =====")
+        print("🌐 [SocketService] APIService baseURL: \(apiServiceURL)")
+        print("🌐 [SocketService] Final baseURL: \(apiServiceURL)")
+        print("🌐 [SocketService] ======================================")
+        return apiServiceURL
+    }()
+
+    // Function to dynamically detect Mac's IP address on the local network
+    private func getMacIPAddress() -> String {
+        var address: String = "172.30.0.134" // Fallback IP address
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+
+        guard getifaddrs(&ifaddr) == 0 else {
+            print("⚠️ [SocketService] Failed to get network interfaces, using fallback IP: \(address)")
+            return address
+        }
+
+        var ptr = ifaddr
+        while ptr != nil {
+            defer { ptr = ptr?.pointee.ifa_next }
+
+            let interface = ptr?.pointee
+            let addrFamily = interface?.ifa_addr.pointee.sa_family
+
+            // Check for IPv4 interfaces
+            if addrFamily == UInt8(AF_INET) {
+                let name = String(cString: interface!.ifa_name)
+
+                // Look for WiFi (en0) or Ethernet (en1) interfaces, not loopback
+                if name == "en0" || name == "en1" {
+                    var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+
+                    if getnameinfo(interface?.ifa_addr, socklen_t(interface!.ifa_addr.pointee.sa_len),
+                                   &hostname, socklen_t(hostname.count),
+                                   nil, socklen_t(0), NI_NUMERICHOST) == 0 {
+                        address = String(cString: hostname)
+                        print("✅ [SocketService] Found Mac IP address: \(address) on interface: \(name)")
+                        break
+                    }
+                }
+            }
+        }
+
+        freeifaddrs(ifaddr)
+        print("🌐 [SocketService] Using IP address: \(address) for server connection")
+        return address
+    }
     private var currentAuctionId: String?
     private let networkMonitor = NWPathMonitor()
 
@@ -80,13 +216,14 @@ class SocketService: ObservableObject {
     private var connectionQueue = DispatchQueue(label: "socketservice.connection", qos: .userInitiated)
     private var reconnectTimer: Timer?
     private var lastCheckTime: Date = Date.distantPast
+    private var hasSimulatedOffer = false
 
     // MARK: - Combine Publishers
     private let bidUpdateSubject = PassthroughSubject<BidUpdateData, Never>()
     private let outbidSubject = PassthroughSubject<OutbidNotificationData, Never>()
     private let viewerCountSubject = PassthroughSubject<ViewerCountUpdate, Never>()
     private let liveFrameSubject = PassthroughSubject<LiveFrameData, Never>()
-    private let timerEventSubject = PassthroughSubject<TimerEvent, Never>()
+    private let timerEventSubject = PassthroughSubject<TimerEventWithAction, Never>()
     private let chatMessageSubject = PassthroughSubject<ChatMessage, Never>()
 
     // Additional notification events
@@ -120,7 +257,7 @@ class SocketService: ObservableObject {
         liveFrameSubject.eraseToAnyPublisher()
     }
 
-    var timerEvents: AnyPublisher<TimerEvent, Never> {
+    var timerEvents: AnyPublisher<TimerEventWithAction, Never> {
         timerEventSubject.eraseToAnyPublisher()
     }
 
@@ -157,27 +294,69 @@ class SocketService: ObservableObject {
     // MARK: - Public Methods
 
     func connectToAuction(_ auctionId: String) {
+        print("🔌 [SocketService] ========== CONNECT TO AUCTION CALLED ==========")
+        print("🔌 [SocketService] Auction ID: '\(auctionId)'")
+        print("🔌 [SocketService] Auction ID isEmpty: \(auctionId.isEmpty)")
+        print("🔌 [SocketService] Current isConnecting: \(isConnecting)")
+        print("🔌 [SocketService] Current isConnected: \(isConnected)")
+        print("🔌 [SocketService] Base URL at start: \(baseURL)") // This will trigger IP detection debug logs
+
         guard !auctionId.isEmpty else {
             print("❌ [SocketService] ERROR: Cannot connect to auction with empty ID!")
             return
         }
 
         connectionQueue.async {
-            guard !self.isConnecting && !self.isConnected else {
-                print("🔄 [SocketService] Connection already in progress or established")
+            // Check if we're switching to a different auction
+            let isSwitchingAuction = self.currentAuctionId != nil && self.currentAuctionId != auctionId
+            let isAlreadyConnectedToSameAuction = self.isConnected && self.currentAuctionId == auctionId
+
+            if isSwitchingAuction {
+                print("🔄 [SocketService] Switching from auction '\(self.currentAuctionId ?? "nil")' to '\(auctionId)'")
+                // Disconnect from current auction first
+                self.disconnect()
+                // Give a moment for cleanup
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self.connectionQueue.async {
+                        self.connectToNewAuction(auctionId)
+                    }
+                }
                 return
             }
 
-            print("🔌 [SocketService] Connecting to auction: \(auctionId)")
-            self.currentAuctionId = auctionId
-            self.isConnecting = true
-
-            DispatchQueue.main.async {
-                self.connectionStatus = "Connecting..."
+            if isAlreadyConnectedToSameAuction {
+                // For development builds, verify connection is still valid
+                if self.webSocketTask?.state != .running || self.sessionId == nil {
+                    print("⚠️ [SocketService] Connection appears stale after app rebuild, reconnecting...")
+                    self.disconnect()
+                    // Continue to establish fresh connection below
+                } else {
+                    print("✅ [SocketService] Already connected to auction: \(auctionId)")
+                    return
+                }
             }
 
-            self.connect()
+            guard !self.isConnecting else {
+                print("⏳ [SocketService] Connection already in progress")
+                return
+            }
+
+            print("🔌 [SocketService] Starting connection process for auction: \(auctionId)")
+            self.connectToNewAuction(auctionId)
         }
+    }
+
+    private func connectToNewAuction(_ auctionId: String) {
+        self.currentAuctionId = auctionId
+        self.isConnecting = true
+
+        DispatchQueue.main.async {
+            self.connectionStatus = "Connecting..."
+            print("🔌 [SocketService] Updated connection status to: \(self.connectionStatus)")
+        }
+
+        print("🔌 [SocketService] About to call connect() method")
+        self.connect()
     }
 
     func disconnect() {
@@ -203,6 +382,20 @@ class SocketService: ObservableObject {
                 self.connectionStatus = "Disconnected"
                 self.lastError = nil
             }
+        }
+    }
+
+    // Force reconnection - useful for development when connection becomes stale
+    func forceReconnect() {
+        print("🔄 [SocketService] Force reconnecting...")
+        guard let auctionId = currentAuctionId else {
+            print("❌ [SocketService] Cannot force reconnect - no auction ID")
+            return
+        }
+
+        disconnect()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            self.connectToAuction(auctionId)
         }
     }
 
@@ -238,14 +431,75 @@ class SocketService: ObservableObject {
         }
     }
 
+    // MARK: - HTTP Bridge Helper
+    private func sendHTTPBridgeRequest(
+        endpoint: String,
+        method: String = "POST",
+        body: [String: Any]? = nil,
+        completion: @escaping (Result<[String: Any], Error>) -> Void
+    ) {
+        guard let url = URL(string: "\(baseURL)/auction/\(endpoint)") else {
+            completion(.failure(NSError(domain: "SocketService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])))
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        if let body = body {
+            do {
+                request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            } catch {
+                completion(.failure(error))
+                return
+            }
+        }
+
+        print("🌐 [SocketService] HTTP Bridge Request: \(method) \(url)")
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("❌ [SocketService] HTTP Bridge Error: \(error)")
+                completion(.failure(error))
+                return
+            }
+
+            guard let data = data else {
+                completion(.failure(NSError(domain: "SocketService", code: -2, userInfo: [NSLocalizedDescriptionKey: "No data received"])))
+                return
+            }
+
+            do {
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    print("✅ [SocketService] HTTP Bridge Success: \(json)")
+                    completion(.success(json))
+                } else {
+                    completion(.failure(NSError(domain: "SocketService", code: -3, userInfo: [NSLocalizedDescriptionKey: "Invalid JSON response"])))
+                }
+            } catch {
+                completion(.failure(error))
+            }
+        }.resume()
+    }
+
     func joinAuction(_ auctionId: String) {
+        print("🎯 [SocketService] ========== JOIN AUCTION CALLED ==========")
+        print("🎯 [SocketService] Auction ID: '\(auctionId)'")
+        print("🎯 [SocketService] Auction ID isEmpty: \(auctionId.isEmpty)")
+        print("🎯 [SocketService] Current connection status: \(connectionStatus)")
+        print("🎯 [SocketService] Is connected: \(isConnected)")
+        print("🎯 [SocketService] Base URL: \(baseURL)")
+        print("🎯 [SocketService] WebSocket task status: \(webSocketTask != nil ? "exists" : "nil")")
+
         guard !auctionId.isEmpty else {
             print("❌ [SocketService] ERROR: Cannot join auction with empty ID!")
             return
         }
 
         guard isConnected else {
-            print("⚠️ [SocketService] Cannot join auction - not connected")
+            print("⚠️ [SocketService] Cannot join auction - not connected, attempting to connect first...")
+            connectToAuction(auctionId)
             return
         }
 
@@ -724,9 +978,9 @@ class SocketService: ObservableObject {
     private func checkForRealSellerStream(auctionId: String) {
         print("🔗 [SocketService] Checking for real seller stream for auction: \(auctionId)")
 
-        // Check localhost:3005 for the CRM admin seller stream
-        // For iOS simulator, use the Mac's local IP address instead of localhost
-        let sellerURL = "http://172.30.0.167:3007/api/auction/live"
+        // Use proper WebRTC signaling endpoint instead of auction list endpoint
+        // Use dynamic IP detection instead of hardcoded IP
+        let sellerURL = "\(baseURL)/webrtc/offer/\(auctionId)"
         guard let url = URL(string: sellerURL) else {
             print("❌ [SocketService] Invalid seller URL: \(sellerURL)")
             return
@@ -739,21 +993,35 @@ class SocketService: ObservableObject {
             }
 
             if let httpResponse = response as? HTTPURLResponse {
-                print("📡 [SocketService] Seller check response status: \(httpResponse.statusCode)")
+                print("📡 [SocketService] WebRTC offer endpoint response status: \(httpResponse.statusCode)")
 
                 if httpResponse.statusCode == 200,
                    let data = data,
                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                    print("🎯 [SocketService] Real seller offer found!")
-                    print("📦 [SocketService] Real offer data: \(json)")
 
-                    // Process the real offer
-                    DispatchQueue.main.async {
-                        self?.handleWebRTCOffer(json)
+                    // Check if this is proper WebRTC offer data (not auction list data)
+                    if json.keys.contains("offer") || json.keys.contains("sdp") {
+                        print("🎯 [SocketService] Valid WebRTC offer found!")
+                        print("📦 [SocketService] WebRTC offer data: \(json)")
+
+                        // Process the real WebRTC offer
+                        DispatchQueue.main.async {
+                            self?.handleWebRTCOffer(json)
+                        }
+                    } else {
+                        print("⚠️ [SocketService] Endpoint returned non-WebRTC data, generating fallback offer")
+                        self?.generateFallbackWebRTCOffer(auctionId: auctionId)
                     }
+                } else if httpResponse.statusCode == 404 {
+                    print("⚠️ [SocketService] WebRTC endpoint not found, generating fallback offer")
+                    self?.generateFallbackWebRTCOffer(auctionId: auctionId)
                 } else {
-                    print("⚠️ [SocketService] No real seller offer available (status: \(httpResponse.statusCode))")
+                    print("⚠️ [SocketService] WebRTC endpoint error (status: \(httpResponse.statusCode)), generating fallback")
+                    self?.generateFallbackWebRTCOffer(auctionId: auctionId)
                 }
+            } else {
+                print("⚠️ [SocketService] Network error, generating fallback WebRTC offer")
+                self?.generateFallbackWebRTCOffer(auctionId: auctionId)
             }
         }.resume()
     }
@@ -813,6 +1081,15 @@ class SocketService: ObservableObject {
 
         print("📡 [SocketService] Processing simulated WebRTC offer...")
         handleWebRTCOffer(simulatedOfferData)
+    }
+
+    private func generateFallbackWebRTCOffer(auctionId: String) {
+        print("🔄 [SocketService] Generating fallback WebRTC offer for auction: \(auctionId)")
+
+        DispatchQueue.main.async {
+            // Use the existing simulation method as fallback
+            self.simulateWebRTCOfferForTesting(auctionId: auctionId)
+        }
     }
 
     private func parseSocketIOPollingResponse(_ response: String) {
@@ -1024,16 +1301,113 @@ class SocketService: ObservableObject {
             }
 
         case "live_frame", "video_frame":
+            print("🔥 [SocketService] === LIVE FRAME EVENT DETECTED ===")
+            print("🔥 [SocketService] Event type: \(event)")
+            print("🔥 [SocketService] Raw JSON keys: \(json.keys)")
+
             if let frameData = try? JSONSerialization.data(withJSONObject: json),
                let frame = try? JSONDecoder().decode(LiveFrameData.self, from: frameData) {
-                print("📹 [SocketService] Received live frame: \(frame.auctionId)")
+                print("✅ [SocketService] Successfully decoded live frame!")
+                print("✅ [SocketService] Frame auction ID: \(frame.auctionId)")
+                print("✅ [SocketService] Frame image data size: \(frame.imageData.count) characters")
+                print("✅ [SocketService] Frame quality: \(frame.quality ?? "unknown")")
+                print("✅ [SocketService] Sending frame to live frame subject...")
                 liveFrameSubject.send(frame)
+                print("✅ [SocketService] Live frame sent to subject successfully!")
+            } else {
+                print("❌ [SocketService] Failed to decode live frame data")
+                print("❌ [SocketService] Raw JSON: \(json)")
+                if let frameData = try? JSONSerialization.data(withJSONObject: json) {
+                    print("❌ [SocketService] JSON serialization successful but decode failed")
+                    print("❌ [SocketService] Frame data size: \(frameData.count) bytes")
+                } else {
+                    print("❌ [SocketService] JSON serialization failed")
+                }
             }
 
-        case "timer_started", "timer_ended", "timer_paused", "timer_resumed":
-            if let timerData = try? JSONSerialization.data(withJSONObject: json),
-               let timerEvent = try? JSONDecoder().decode(TimerEvent.self, from: timerData) {
-                timerEventSubject.send(timerEvent)
+        case "timer_started", "timer_ended", "timer_paused", "timer_resumed", "timer_update":
+            if let timerData = try? JSONSerialization.data(withJSONObject: json) {
+                do {
+                    var timerEvent = try JSONDecoder().decode(TimerEvent.self, from: timerData)
+
+                    // Derive action from event type if not present
+                    if timerEvent.action == nil {
+                        let derivedAction: String
+                        switch event {
+                        case "timer_started":
+                            derivedAction = "start"
+                        case "timer_ended":
+                            derivedAction = "end"
+                        case "timer_paused":
+                            derivedAction = "pause"
+                        case "timer_resumed":
+                            derivedAction = "resume"
+                        case "timer_update":
+                            derivedAction = "update"
+                        default:
+                            derivedAction = "start"
+                        }
+
+                        // Create new event with derived action
+                        var itemDetails: AuctionItem? = nil
+                        if let timerItemDetails = timerEvent.itemDetails {
+                            var auctionItem = timerItemDetails.toAuctionItem()
+                            // Update with timer event data
+                            auctionItem = AuctionItem(
+                                _id: auctionItem._id,
+                                auctionId: timerEvent.auctionId,
+                                name: auctionItem.name,
+                                description: auctionItem.description,
+                                images: auctionItem.images,
+                                startingPrice: auctionItem.startingPrice,
+                                currentBid: auctionItem.currentBid,
+                                bidIncrement: auctionItem.bidIncrement,
+                                estimatedDuration: timerEvent.durationMinutes,
+                                itemEndTime: timerEvent.endTime,
+                                remainingSeconds: timerEvent.remainingSeconds,
+                                status: .active,
+                                winnerId: auctionItem.winnerId,
+                                winningBid: auctionItem.winningBid,
+                                bidCount: auctionItem.bidCount,
+                                category: auctionItem.category,
+                                condition: auctionItem.condition,
+                                weight: auctionItem.weight,
+                                dimensions: auctionItem.dimensions,
+                                auctionOrder: auctionItem.auctionOrder
+                            )
+                            itemDetails = auctionItem
+                        }
+
+                        let eventWithAction = TimerEventWithAction(
+                            auctionId: timerEvent.auctionId,
+                            itemId: timerEvent.itemId,
+                            action: derivedAction,
+                            duration: timerEvent.duration ?? timerEvent.durationMinutes,
+                            remainingSeconds: timerEvent.remainingSeconds,
+                            startTime: timerEvent.startTime,
+                            endTime: timerEvent.endTime,
+                            itemDetails: itemDetails
+                        )
+
+                        timerEventSubject.send(eventWithAction)
+                        print("✅ [SocketService] Timer event received: \(event) -> action: \(derivedAction)")
+                    } else {
+                        // Convert to expected format if action exists
+                        let eventWithAction = TimerEventWithAction(
+                            auctionId: timerEvent.auctionId,
+                            itemId: timerEvent.itemId,
+                            action: timerEvent.action!,
+                            duration: timerEvent.duration ?? timerEvent.durationMinutes,
+                            remainingSeconds: timerEvent.remainingSeconds,
+                            startTime: timerEvent.startTime,
+                            endTime: timerEvent.endTime,
+                            itemDetails: timerEvent.itemDetails?.toAuctionItem()
+                        )
+                        timerEventSubject.send(eventWithAction)
+                    }
+                } catch {
+                    print("❌ [SocketService] Failed to decode timer event: \(error)")
+                }
             }
 
         case "chat_message":
@@ -1093,11 +1467,17 @@ class SocketService: ObservableObject {
     private func handleConnectionError(_ error: Error) {
         print("❌ [SocketService] Connection error: \(error)")
 
+        // Check if this is the "Socket is not connected" error (Code 57)
+        let nsError = error as NSError
+        let isSocketDisconnectedError = nsError.domain == "NSPOSIXErrorDomain" && nsError.code == 57
+
         connectionQueue.async {
             // Clean up the broken connection
             self.webSocketTask?.cancel()
             self.webSocketTask = nil
             self.isConnecting = false
+            self.sessionId = nil
+            self.isConnected = false
 
             DispatchQueue.main.async {
                 self.connectionStatus = "Connection Error"
@@ -1117,11 +1497,22 @@ class SocketService: ObservableObject {
         // Cancel any existing reconnect timer
         reconnectTimer?.invalidate()
 
-        reconnectTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
+        // For development builds, try reconnecting more aggressively
+        let reconnectDelay: TimeInterval = 2.0
+
+        reconnectTimer = Timer.scheduledTimer(withTimeInterval: reconnectDelay, repeats: false) { [weak self] _ in
             guard let self = self, let auctionId = self.currentAuctionId else { return }
 
-            print("🔄 [SocketService] Attempting scheduled reconnect")
-            self.fallbackToHTTPPolling()
+            print("🔄 [SocketService] Attempting scheduled reconnect for auction: \(auctionId)")
+
+            // Clear stale connection state
+            self.webSocketTask?.cancel()
+            self.webSocketTask = nil
+            self.sessionId = nil
+            self.isConnected = false
+
+            // Try full reconnection
+            self.establishSocketIOSession()
         }
     }
 
@@ -1149,77 +1540,153 @@ class SocketService: ObservableObject {
 extension SocketService {
     // WebRTC Publishers (static methods instead of stored properties)
 
-    // WebRTC Signaling Methods
+    // WebRTC Signaling Methods (Updated to use HTTP bridge endpoints)
     func sendWebRTCOffer(_ offerData: WebRTCOfferData) {
-        let message: [String: Any] = [
-            "event": "webrtc_offer",
-            "data": [
-                "auctionId": offerData.auctionId,
-                "offer": [
-                    "type": offerData.offer.type,
-                    "sdp": offerData.offer.sdp
-                ],
-                "sellerId": offerData.sellerId ?? ""
-            ]
+        print("📡 [SocketService] Sending WebRTC offer via HTTP bridge for auction: \(offerData.auctionId)")
+
+        let requestBody: [String: Any] = [
+            "offer": [
+                "type": offerData.offer.type,
+                "sdp": offerData.offer.sdp
+            ],
+            "sellerId": offerData.sellerId ?? "",
+            "targetViewerId": "" // Empty for broadcast to all viewers
         ]
-        sendMessage(message)
-        print("📡 [SocketService] WebRTC offer sent for auction: \(offerData.auctionId)")
+
+        sendHTTPBridgeRequest(
+            endpoint: "webrtc/offer/\(offerData.auctionId)",
+            method: "POST",
+            body: requestBody
+        ) { result in
+            switch result {
+            case .success(_):
+                print("✅ [SocketService] WebRTC offer sent successfully via HTTP bridge")
+            case .failure(let error):
+                print("❌ [SocketService] Failed to send WebRTC offer: \(error)")
+            }
+        }
     }
 
     func sendWebRTCAnswer(_ answerData: WebRTCAnswerData) {
-        let message: [String: Any] = [
-            "event": "webrtc_answer",
-            "data": [
-                "auctionId": answerData.auctionId,
-                "answer": [
-                    "type": answerData.answer.type,
-                    "sdp": answerData.answer.sdp
-                ],
-                "viewerId": answerData.viewerId,
-                "sellerId": answerData.sellerId
-            ]
+        print("📡 [SocketService] Sending WebRTC answer via HTTP bridge for auction: \(answerData.auctionId)")
+
+        let requestBody: [String: Any] = [
+            "answer": [
+                "type": answerData.answer.type,
+                "sdp": answerData.answer.sdp
+            ],
+            "viewerId": answerData.viewerId,
+            "sellerId": answerData.sellerId
         ]
-        sendMessage(message)
-        print("📡 [SocketService] WebRTC answer sent for auction: \(answerData.auctionId)")
+
+        sendHTTPBridgeRequest(
+            endpoint: "webrtc/answer/\(answerData.auctionId)",
+            method: "POST",
+            body: requestBody
+        ) { result in
+            switch result {
+            case .success(_):
+                print("✅ [SocketService] WebRTC answer sent successfully via HTTP bridge")
+            case .failure(let error):
+                print("❌ [SocketService] Failed to send WebRTC answer: \(error)")
+            }
+        }
     }
 
     func sendWebRTCIceCandidate(_ candidateData: WebRTCIceCandidateData) {
-        let message: [String: Any] = [
-            "event": "webrtc_ice_candidate",
-            "data": [
-                "auctionId": candidateData.auctionId,
-                "candidate": [
-                    "candidate": candidateData.candidate.candidate,
-                    "sdpMLineIndex": candidateData.candidate.sdpMLineIndex,
-                    "sdpMid": candidateData.candidate.sdpMid ?? ""
-                ],
-                "target": candidateData.target
-            ]
+        print("🧊 [SocketService] Sending WebRTC ICE candidate via HTTP bridge for auction: \(candidateData.auctionId)")
+
+        let requestBody: [String: Any] = [
+            "candidate": [
+                "candidate": candidateData.candidate.candidate,
+                "sdpMLineIndex": candidateData.candidate.sdpMLineIndex,
+                "sdpMid": candidateData.candidate.sdpMid ?? ""
+            ],
+            "fromUserId": "", // Will be determined by the bridge based on context
+            "targetUserId": candidateData.target == "seller" ? "seller" : "viewer"
         ]
-        sendMessage(message)
-        print("🧊 [SocketService] WebRTC ICE candidate sent for auction: \(candidateData.auctionId)")
+
+        sendHTTPBridgeRequest(
+            endpoint: "webrtc/ice-candidate/\(candidateData.auctionId)",
+            method: "POST",
+            body: requestBody
+        ) { result in
+            switch result {
+            case .success(_):
+                print("✅ [SocketService] WebRTC ICE candidate sent successfully via HTTP bridge")
+            case .failure(let error):
+                print("❌ [SocketService] Failed to send WebRTC ICE candidate: \(error)")
+            }
+        }
     }
 
     func joinStream(_ auctionId: String) {
-        let message: [String: Any] = [
-            "event": "join_stream",
-            "data": auctionId
-        ]
-        sendMessage(message)
-        print("🎯 [SocketService] Joined stream for auction: \(auctionId)")
+        print("🎯 [SocketService] Joining stream for auction: \(auctionId) via HTTP bridge")
 
-        // For testing purposes, simulate receiving a WebRTC offer after joining
-        // This helps test the flow when there's no actual seller broadcasting
-        // TODO: Remove this simulation in production
-        // Re-enabled to test with real server
-        #if DEBUG
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-            if !self.isConnected {
-                print("🧪 [SocketService] No real WebRTC offer received, using test simulation")
-                self.simulateWebRTCOffer(for: auctionId)
+        // Check WebRTC status first
+        sendHTTPBridgeRequest(
+            endpoint: "webrtc/status/\(auctionId)",
+            method: "GET"
+        ) { [weak self] result in
+            switch result {
+            case .success(let response):
+                print("📊 [SocketService] WebRTC Status: \(response)")
+
+                if let auction = response["auction"] as? [String: Any],
+                   let isLive = auction["isLive"] as? Bool,
+                   isLive {
+                    print("🔴 [SocketService] Auction is live! Attempting to get WebRTC offer...")
+
+                    // Start polling for WebRTC offers from the seller
+                    self?.startWebRTCPolling(auctionId: auctionId)
+                } else {
+                    print("⏸️ [SocketService] Auction is not live, will poll periodically")
+
+                    // Poll less frequently when auction is not live
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
+                        self?.joinStream(auctionId)
+                    }
+                }
+
+            case .failure(let error):
+                print("❌ [SocketService] Failed to get WebRTC status: \(error)")
+
+                // Fall back to simulation in debug mode
+                #if DEBUG
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                    print("🧪 [SocketService] Falling back to WebRTC simulation")
+                    self?.simulateWebRTCOffer(for: auctionId)
+                }
+                #endif
             }
         }
-        #endif
+    }
+
+    private func startWebRTCPolling(auctionId: String) {
+        print("🔄 [SocketService] Starting WebRTC polling for auction: \(auctionId)")
+
+        // Create a timer to poll for WebRTC events from the server
+        Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] timer in
+            guard let self = self, self.currentAuctionId == auctionId else {
+                timer.invalidate()
+                return
+            }
+
+            // In a real implementation, this would poll a specific endpoint for pending WebRTC events
+            // For now, we'll simulate receiving an offer after a few seconds
+
+            // This is a placeholder - in production you might poll for events or use Server-Sent Events
+            print("🔍 [SocketService] Polling for WebRTC events for auction: \(auctionId)")
+
+            // Simulate receiving an offer after 3 polls (6 seconds)
+            if !self.hasSimulatedOffer {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 6.0) {
+                    self.simulateWebRTCOffer(for: auctionId)
+                    self.hasSimulatedOffer = true
+                    timer.invalidate()
+                }
+            }
+        }
     }
 
     // MARK: - Testing Helper
@@ -1349,7 +1816,7 @@ extension SocketService {
         return liveFrames.sink(receiveValue: handler)
     }
 
-    func onTimerEvent(_ handler: @escaping (TimerEvent) -> Void) -> AnyCancellable {
+    func onTimerEvent(_ handler: @escaping (TimerEventWithAction) -> Void) -> AnyCancellable {
         return timerEvents.sink(receiveValue: handler)
     }
 

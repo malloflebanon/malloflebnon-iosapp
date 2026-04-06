@@ -4,7 +4,7 @@ import Combine
 class APIService: ObservableObject {
     static let shared = APIService()
 
-    private let baseURL = "http://172.30.0.167:3007/api"
+    private let baseURL = "http://192.168.10.158:3007/api"
 
     // Public property for debugging
     internal var baseURLForDebugging: String {

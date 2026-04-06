@@ -57,7 +57,7 @@ struct AuthResponse: Codable {
     let success: Bool
     let message: String
     let user: User
-    let token: String
+    let token: String?
 }
 
 // Note: Category models moved to ProductModels.swift

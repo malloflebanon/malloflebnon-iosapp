@@ -9,6 +9,8 @@ struct LoginView: View {
     @State private var showPassword = false
     @State private var showingForgotPassword = false
 
+    @FocusState private var focusedField: Field?
+
     enum Field: Hashable {
         case email, password
     }
@@ -48,12 +50,10 @@ struct LoginView: View {
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
                                 .submitLabel(.next)
+                                .focused($focusedField, equals: .email)
                                 .onSubmit {
                                     // Move focus to password field on submit
-                                    hideKeyboard()
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                        // Will be handled by password field focus
-                                    }
+                                    focusedField = .password
                                 }
 
                             if let emailError = authManager.validateEmail(email), !email.isEmpty {
@@ -75,8 +75,10 @@ struct LoginView: View {
                                     TextField("Enter your password", text: $password)
                                         .textInputAutocapitalization(.never)
                                         .autocorrectionDisabled()
+                                        .focused($focusedField, equals: .password)
                                 } else {
                                     SecureField("Enter your password", text: $password)
+                                        .focused($focusedField, equals: .password)
                                 }
 
                                 Button(action: {
@@ -90,6 +92,7 @@ struct LoginView: View {
                             .submitLabel(.go)
                             .onSubmit {
                                 if isFormValid {
+                                    focusedField = nil
                                     login()
                                 }
                             }
@@ -147,7 +150,7 @@ struct LoginView: View {
                 .frame(minHeight: geometry.size.height)
             }
             .onTapGesture {
-                hideKeyboard()
+                focusedField = nil
             }
         }
         .navigationTitle("Sign In")
@@ -166,6 +169,20 @@ struct LoginView: View {
         }
         .onAppear {
             authManager.clearError()
+            // Automatically focus email field when view appears
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                focusedField = .email
+            }
+
+            // Force software keyboard in simulator
+            #if targetEnvironment(simulator)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                focusedField = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    focusedField = .email
+                }
+            }
+            #endif
         }
         .alert("Reset Password", isPresented: $showingForgotPassword) {
             Button("OK") { }
@@ -184,12 +201,8 @@ struct LoginView: View {
 
     // MARK: - Actions
     private func login() {
-        hideKeyboard()
+        focusedField = nil
         authManager.login(email: email, password: password)
-    }
-
-    private func hideKeyboard() {
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 }
 

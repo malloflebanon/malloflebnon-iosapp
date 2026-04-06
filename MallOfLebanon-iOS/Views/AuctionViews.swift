@@ -1,28 +1,14 @@
 import SwiftUI
 import Combine
 import Foundation
+import Network
+import WebKit
+
+// MARK: - Socket Data Models (imported from SocketService)
+// TimerEvent, LiveFrameData, BidUpdateData, and ViewerCountUpdate are now imported from SocketService
 
 // MARK: - Video Streaming Data Models
-
-struct LiveFrameData: Codable {
-    let auctionId: String
-    let imageData: String // base64 data URL
-    let quality: String?
-    let resolution: String?
-    let timestamp: Double?
-    let frameNumber: Int?
-
-    // Computed property to provide fallback timestamp
-    var safeTimestamp: Double {
-        return timestamp ?? Date().timeIntervalSince1970
-    }
-}
-
-struct QualityRequest: Codable {
-    let auctionId: String
-    let quality: String // "low", "medium", "high", "ultra"
-    let timestamp: String
-}
+// LiveFrameData, QualityRequest, and other Socket.IO models are imported from SocketService
 
 
 // MARK: - Auction Sheet Item
@@ -93,11 +79,17 @@ struct AuctionSection: View {
                 }
         }
         .fullScreenCover(isPresented: $showingLiveAuction) {
+            // Use liveAuctionId directly - it will be set before showingLiveAuction becomes true
             LiveAuctionPageView(auctionId: liveAuctionId)
                 .onAppear {
                     print("🚀 [AuctionSection] Full-screen LiveAuctionPageView presented")
                     print("🎯 [AuctionSection] LiveAuctionPageView auctionId parameter: '\(liveAuctionId)'")
                     print("📊 [AuctionSection] liveAuctionId state value: '\(liveAuctionId)'")
+                    #if targetEnvironment(simulator)
+                    print("🚀 [AuctionSection] LiveAuctionPageView: Running on SIMULATOR")
+                    #else
+                    print("🚀 [AuctionSection] LiveAuctionPageView: Running on ACTUAL DEVICE")
+                    #endif
                 }
                 .onDisappear {
                     print("👋 [AuctionSection] Full-screen LiveAuctionPageView dismissed")
@@ -177,6 +169,12 @@ struct AuctionSection: View {
                                 print("🎯 [AuctionSection] User tapped live auction: \(auction.title)")
                                 print("📱 [AuctionSection] Auction ID: \(auction._id)")
                                 print("📈 [AuctionSection] Auction Status: \(auction.status.displayName)")
+                                print("📱 [AuctionSection] Device vs Simulator check:")
+                                #if targetEnvironment(simulator)
+                                print("📱 [AuctionSection] Running on SIMULATOR")
+                                #else
+                                print("📱 [AuctionSection] Running on ACTUAL DEVICE")
+                                #endif
                                 print("🚀 [AuctionSection] Opening LiveAuctionPageView directly for live auction")
 
                                 // Use dispatch to ensure state is set on main thread
@@ -281,18 +279,27 @@ struct AuctionSection: View {
 
     private func presentLiveAuction(auctionId: String) {
         print("🚀 [AuctionSection] presentLiveAuction called with ID: \(auctionId)")
+        #if targetEnvironment(simulator)
+        print("🚀 [AuctionSection] presentLiveAuction: Running on SIMULATOR")
+        #else
+        print("🚀 [AuctionSection] presentLiveAuction: Running on ACTUAL DEVICE")
+        #endif
+
         guard !auctionId.isEmpty else {
             print("❌ [AuctionSection] Cannot present live auction with empty ID")
             return
         }
 
+        print("🔧 [AuctionSection] Before setting liveAuctionId, current showingLiveAuction = \(showingLiveAuction)")
         liveAuctionId = auctionId
         print("📱 [AuctionSection] Set liveAuctionId = \(liveAuctionId)")
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            print("🎯 [AuctionSection] Triggering fullScreenCover presentation")
-            showingLiveAuction = true
-            print("✅ [AuctionSection] showingLiveAuction = true")
+            print("🎯 [AuctionSection] About to trigger fullScreenCover presentation")
+            print("🎯 [AuctionSection] Current thread: \(Thread.isMainThread ? "Main" : "Background")")
+            self.showingLiveAuction = true
+            print("✅ [AuctionSection] showingLiveAuction set to: \(self.showingLiveAuction)")
+            print("✅ [AuctionSection] liveAuctionId is: '\(self.liveAuctionId)'")
         }
     }
 }
@@ -840,7 +847,7 @@ struct AuctionCard: View {
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(Color.black.opacity(0.7))
+                .background(Color.primary.opacity(0.1))
                 .cornerRadius(12)
                 .padding(8)
             }
@@ -925,7 +932,15 @@ struct AuctionCard: View {
             }
 
             // Action Button
-            Button(action: onTap) {
+            Button(action: {
+                print("🔥 [AuctionCard] Button tapped! Auction: \(auction.title)")
+                #if targetEnvironment(simulator)
+                print("🔥 [AuctionCard] Button tap: Running on SIMULATOR")
+                #else
+                print("🔥 [AuctionCard] Button tap: Running on ACTUAL DEVICE")
+                #endif
+                onTap()
+            }) {
                 HStack {
                     Image(systemName: isLive ? "hammer.fill" : "calendar")
                         .font(.subheadline)
@@ -961,7 +976,7 @@ struct AuctionCard: View {
         .frame(width: 300)
         .background(Color(.systemBackground))
         .cornerRadius(16)
-        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+        .shadow(color: .primary.opacity(0.1), radius: 8, x: 0, y: 4)
     }
 }
 
@@ -1156,7 +1171,7 @@ struct AuctionListRow: View {
         .padding()
         .background(Color(.systemBackground))
         .cornerRadius(12)
-        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .shadow(color: .primary.opacity(0.05), radius: 4, x: 0, y: 2)
     }
 }
 
@@ -1322,7 +1337,7 @@ struct LiveStreamPlaceholderView: View {
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(Color.black.opacity(0.7))
+                        .background(Color.primary.opacity(0.1))
                         .foregroundColor(.white)
                         .cornerRadius(12)
 
@@ -1477,6 +1492,7 @@ struct LiveStreamPlayerView: View {
                         Image(uiImage: frame)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
+                            .scaleEffect(0.9) // Zoomed out to show more content
                             .clipped()
                             .onTapGesture {
                                 withAnimation(.easeInOut(duration: 0.3)) {
@@ -1674,13 +1690,13 @@ struct LiveStreamPlayerView: View {
 
     private func fullScreenVideoView() -> some View {
         ZStack {
-            // Video content - fills entire screen edge to edge
+            // Video content - fills entire screen edge to edge without zooming
             if let frame = currentFrame {
                 Image(uiImage: frame)
                     .resizable()
-                    .aspectRatio(contentMode: .fill)
+                    .aspectRatio(contentMode: .fit)
+                    .scaleEffect(0.9) // Zoomed out to show more content
                     .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
-                    .clipped()
                     .ignoresSafeArea(.all)
                     .onTapGesture {
                         withAnimation(.easeInOut(duration: 0.3)) {
@@ -2752,7 +2768,6 @@ struct LiveAuctionPageView: View {
     let auctionId: String
 
     @StateObject private var auctionService = AuctionService.shared
-    @StateObject private var socketService = SocketService.shared
     @Environment(\.presentationMode) var presentationMode
 
     // Data State
@@ -2773,12 +2788,27 @@ struct LiveAuctionPageView: View {
     // Real-time Updates
     @State private var viewerCount = 0
     @State private var connectionStatus = "Connecting..."
-    @State private var isMinimized = false
+
+    // Computed property to always show an item (current or most recent)
+    private var displayItem: AuctionItem? {
+        // First priority: current active item
+        if let current = currentItem {
+            return current
+        }
+
+        // Second priority: most recently ended item (sold or unsold)
+        return items.filter { $0.status == .sold || $0.status == .unsold }
+                   .sorted { first, second in
+                       // Sort by auction order descending to get most recent
+                       (first.auctionOrder ?? 0) > (second.auctionOrder ?? 0)
+                   }
+                   .first
+    }
 
     var body: some View {
         ZStack {
             // Full-screen background
-            Color.black
+            Color(.systemBackground)
                 .ignoresSafeArea(.all)
 
             if isLoading {
@@ -2790,6 +2820,8 @@ struct LiveAuctionPageView: View {
             }
         }
         .onAppear {
+            print("🚀 [LiveAuctionPageView] ===== onAppear CALLED =====")
+            print("🚀 [LiveAuctionPageView] Auction ID parameter: '\(auctionId)'")
             loadAuctionData()
             setupRealTimeUpdates()
         }
@@ -2854,11 +2886,8 @@ struct LiveAuctionPageView: View {
     private func fullScreenAuctionView(_ auction: LiveAuction) -> some View {
         ZStack {
             // Full-screen live stream (background layer)
-            WebRTCLiveStreamView(
-                auctionId: auctionId,
-                auctionTitle: auction.title
-            )
-            .ignoresSafeArea(.all)
+            LiveStreamDisplayView(auctionId: auctionId)
+                .ignoresSafeArea(.all)
 
             // Floating overlays (foreground layer) - always visible
             floatingControlsOverlay(auction)
@@ -2875,7 +2904,7 @@ struct LiveAuctionPageView: View {
                 topControlsBar(auction)
             }
             .padding(.horizontal)
-            .padding(.top)
+            .padding(.top, 8)
 
             Spacer()
 
@@ -2910,14 +2939,14 @@ struct LiveAuctionPageView: View {
                         .font(.caption)
                         .fontWeight(.medium)
 
-                    // Down arrow button for minimize
+                    // Close button - return to home
                     Button(action: {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            isMinimized.toggle()
-                        }
-                        print("📱 Down arrow tapped - isMinimized: \(isMinimized)")
+                        print("📱 Close button tapped - returning to home")
+                        SocketService.shared.disconnect()
+                        cleanup()
+                        presentationMode.wrappedValue.dismiss()
                     }) {
-                        Image(systemName: isMinimized ? "chevron.up" : "chevron.down")
+                        Image(systemName: "chevron.down")
                             .font(.system(size: 12, weight: .bold))
                             .foregroundColor(.white)
                             .frame(width: 20, height: 20)
@@ -2939,10 +2968,7 @@ struct LiveAuctionPageView: View {
             // Auction Item Display
             auctionItemDisplay(auction)
 
-            // Current item info (if available)
-            if let item = currentItem {
-                currentItemFloatingBanner(item)
-            }
+            // Current item info section removed as requested
 
             // Action buttons removed as requested (items, chat, bid)
         }
@@ -2951,173 +2977,227 @@ struct LiveAuctionPageView: View {
     // MARK: - Auction Item Display
     private func auctionItemDisplay(_ auction: LiveAuction) -> some View {
         VStack(spacing: 0) {
-            // Main item info row - Two sections layout
-            HStack(spacing: 0) {
-                // LEFT SECTION - Image + Title + Shipping (at beginning of screen)
-                HStack(alignment: .top, spacing: 12) {
-                    // Smaller item image - real product image
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(width: 50, height: 50)
-                        .overlay(
-                            Image(systemName: "shippingbox.fill")
-                                .font(.title2)
-                                .foregroundColor(.white.opacity(0.8))
-                        )
+            // Always show an item - either current active item or most recent item
+            if let item = displayItem {
+                // Main item info row - Two sections layout with real data
+                HStack(spacing: 0) {
+                    // LEFT SECTION - Image + Title + Shipping (at beginning of screen)
+                    HStack(alignment: .top, spacing: 12) {
+                        // Item image - real product image or placeholder
+                        if let imageUrl = item.primaryImageURL {
+                            CachedImageView(
+                                url: URL(string: imageUrl),
+                                placeholder: { ProgressView().scaleEffect(0.5) },
+                                failureView: {
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(Color.gray.opacity(0.3))
+                                        .overlay(
+                                            Image(systemName: "photo")
+                                                .font(.title2)
+                                                .foregroundColor(.white.opacity(0.8))
+                                        )
+                                }
+                            )
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 50, height: 50)
+                            .clipped()
+                            .cornerRadius(6)
+                        } else {
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 50, height: 50)
+                                .overlay(
+                                    Text(String(item.name.prefix(2)).uppercased())
+                                        .font(.caption)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.white)
+                                )
+                        }
 
-                    // Item details column
-                    VStack(alignment: .leading, spacing: 2) {
-                        // Item name at top aligned with image
-                        Text("XS-XSMALL PULL #191")
-                            .font(Font.subheadline.weight(.semibold))
-                            .foregroundColor(.white)
-                            .lineLimit(1)
-
-                        // Open-box below name
-                        Text("Open-box")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.8))
-
-                        // Shipping on same line as flag
-                        HStack(spacing: 4) {
-                            Text("🇱🇧")
-                            Text("US$38.24 Int Shipping + Taxes")
-                                .font(.caption2)
-                                .foregroundColor(.white.opacity(0.9))
+                        // Item details column
+                        VStack(alignment: .leading, spacing: 2) {
+                            // Item name at top aligned with image
+                            Text(item.name)
+                                .font(Font.subheadline.weight(.semibold))
+                                .foregroundColor(.white)
                                 .lineLimit(1)
+
+                            // Condition below name
+                            Text(item.condition ?? "Live Auction")
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.8))
+
+                            // Starting price info
+                            HStack(spacing: 4) {
+                                Text("🇱🇧")
+                                Text("Starting: \(formatPrice(item.startingPrice, auction.currency))")
+                                    .font(.caption2)
+                                    .foregroundColor(.white.opacity(0.9))
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+
+                    Spacer()
+
+                    // RIGHT SECTION - Price and timer (not overlapping)
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(formatPrice(item.startingPrice, auction.currency))
+                            .font(Font.title3.weight(.bold))
+                            .foregroundColor(.white)
+                            .onAppear {
+                                print("💰 [AuctionViews] REAL LOCATION - Item: \(item.name)")
+                                print("💰 [AuctionViews] currentBid: \(item.currentBid ?? -999), startingPrice: \(item.startingPrice)")
+                                print("💰 [AuctionViews] Using startingPrice: \(item.startingPrice)")
+                            }
+
+                        // Always use backend remainingSeconds data like price uses currentBid
+                        HStack(spacing: 2) {
+                            if item.status == .active {
+                                Text("💀")
+                                // Display actual countdown from backend API (same way price is displayed)
+                                if let remainingTime = item.remainingSeconds, remainingTime > 0 {
+                                    // Show real countdown from seller's timer (e.g., "5:30", "2:15")
+                                    Text(formatDuration(remainingTime))
+                                        .font(.caption2)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(remainingTime <= 30 ? .red : (remainingTime <= 60 ? .orange : .white))
+                                        .onAppear {
+                                            print("⏰ [AuctionViews] SELLER'S TIMER: \(remainingTime) seconds (\(formatDuration(remainingTime)))")
+                                            print("⏰ [AuctionViews] Item: \(item.name)")
+                                        }
+                                } else if let endTime = item.itemEndTime {
+                                    // Fallback: use endTime from backend if available
+                                    AuctionTimerCompactView(endTime: endTime)
+                                        .onAppear {
+                                            print("⏰ [AuctionViews] Using itemEndTime fallback for: \(item.name)")
+                                        }
+                                } else {
+                                    // Last fallback: show LIVE if no timer data
+                                    Text("LIVE")
+                                        .font(.caption2)
+                                        .foregroundColor(.red)
+                                        .onAppear {
+                                            print("⏰ [AuctionViews] No timer data, showing LIVE for: \(item.name)")
+                                        }
+                                }
+                            } else {
+                                Text(item.status == .sold ? "✅" : "💀")
+                                if item.status == .sold {
+                                    Text("SOLD")
+                                        .font(.caption2)
+                                        .foregroundColor(.green)
+                                } else {
+                                    Text("ENDED")
+                                        .font(.caption2)
+                                        .foregroundColor(.gray)
+                                }
+                            }
                         }
                     }
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
 
-                Spacer()
-
-                // RIGHT SECTION - Price and timer (not overlapping)
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("US$2")
-                        .font(Font.title3.weight(.bold))
-                        .foregroundColor(.white)
-
-                    HStack(spacing: 2) {
-                        Text("💀")
-                        Text("00:01")
-                            .font(.caption2)
-                            .foregroundColor(.red)
+                // Bottom buttons row
+                HStack(spacing: 12) {
+                    // Custom button - with white border
+                    Button(action: {
+                        print("🎛️ Custom button tapped")
+                    }) {
+                        Text("Custom")
+                            .font(Font.subheadline.weight(.medium))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Color.clear)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .stroke(Color.white, lineWidth: 1)
+                            )
                     }
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
 
-            // Bottom buttons row
-            HStack(spacing: 12) {
-                // Custom button - with white border
-                Button(action: {
-                    print("🎛️ Custom button tapped")
-                }) {
-                    Text("Custom")
-                        .font(Font.subheadline.weight(.medium))
+                    // Bid button - active for current item, disabled for ended items
+                    Button(action: {
+                        if item.status == .active {
+                            showingBiddingSheet = true
+                            print("💰 Bid button tapped for item: \(item.name)")
+                        } else {
+                            print("📝 Cannot bid on ended item: \(item.name)")
+                        }
+                    }) {
+                        HStack {
+                            if item.status == .active {
+                                // Debug logging for bid calculation
+                                let _ = print("🔍 [BID BUTTON] Item: \(item.name)")
+                                let _ = print("🔍 [BID BUTTON] - startingPrice: \(item.startingPrice)")
+                                let _ = print("🔍 [BID BUTTON] - currentBid: \(item.currentBid ?? -999)")
+                                let _ = print("🔍 [BID BUTTON] - bidIncrement: \(item.bidIncrement)")
+                                let _ = print("🔍 [BID BUTTON] - nextMinimumBid: \(item.nextMinimumBid)")
+
+                                Text("Bid: \(formatPrice(item.nextMinimumBid, auction.currency))")
+                            } else {
+                                Text(item.status == .sold ? "SOLD" : "ENDED")
+                            }
+                            if item.status == .active {
+                                Image(systemName: "chevron.right.2")
+                            }
+                        }
+                        .font(Font.subheadline.weight(.semibold))
                         .foregroundColor(.white)
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, 20)
                         .padding(.vertical, 10)
-                        .background(Color.clear)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 20)
-                                .stroke(Color.white, lineWidth: 1)
-                        )
-                }
-
-                // Bid button - orange background
-                Button(action: {
-                    print("💰 Bid button tapped")
-                }) {
-                    HStack {
-                        Text("Bid: US$3")
-                        Image(systemName: "chevron.right.2")
+                        .frame(maxWidth: .infinity)
+                        .background(item.status == .active ? Color.orange : Color.gray.opacity(0.6))
+                        .cornerRadius(20)
                     }
-                    .font(Font.subheadline.weight(.semibold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .frame(maxWidth: .infinity)
-                    .background(Color.orange)
-                    .cornerRadius(20)
+                    .disabled(item.status != .active)
                 }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
+                .padding(.top, 8)
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
-            .padding(.top, 8)
         }
         .padding(.horizontal, 8)
         .padding(.bottom, 0)
     }
 
-    private func currentItemFloatingBanner(_ item: AuctionItem) -> some View {
-        HStack(spacing: 12) {
-            // Item Thumbnail
-            if let imageUrl = item.primaryImageURL {
-                CachedImageView(
-                    url: URL(string: imageUrl),
-                    placeholder: { ProgressView().scaleEffect(0.5) },
-                    failureView: {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.gray.opacity(0.3))
-                            .overlay(
-                                Image(systemName: "photo")
-                                    .foregroundColor(.gray)
-                            )
-                    }
-                )
-                .aspectRatio(contentMode: .fill)
-                .frame(width: 50, height: 50)
-                .clipped()
-                .cornerRadius(8)
-            }
-
-            // Item Info
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("🔴 LIVE")
-                        .font(.caption2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.red)
-
-                    // Timer if available
-                    if let endTime = item.itemEndTime {
-                        AuctionTimerCompactView(endTime: endTime)
-                    }
-                }
-
-                Text(item.name)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .lineLimit(1)
-                    .foregroundColor(.white)
-
-                HStack(spacing: 12) {
-                    Text("Current: $\(String(format: "%.0f", item.currentBid ?? item.startingPrice))")
-                        .font(.caption)
-                        .foregroundColor(.green)
-
-                    Text("Next: $\(String(format: "%.0f", item.nextMinimumBid))")
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                }
-            }
-
-            Spacer()
-        }
-        .padding()
-        .background(Color.black.opacity(0.8))
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.red.opacity(0.6), lineWidth: 1)
-        )
-    }
+    // Floating banner function removed as requested
 
     // MARK: - Overlay Views
 
     // Items and chat overlay views removed as requested
+
+    // MARK: - Helper Methods
+
+    private func formatPrice(_ amount: Double, _ currency: String) -> String {
+        print("🔍 [FORMAT PRICE] Input: amount=\(amount), currency='\(currency)'")
+
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = currency.uppercased()
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 0
+        formatter.locale = Locale(identifier: "en_US")
+
+        if let formattedString = formatter.string(from: NSNumber(value: amount)) {
+            print("🔍 [FORMAT PRICE] NumberFormatter success: '\(formattedString)'")
+            return formattedString
+        } else {
+            // More robust fallback - use proper string formatting
+            let formattedAmount = String(format: "%.0f", amount)
+            let fallback = "$\(formattedAmount)"
+            print("🔍 [FORMAT PRICE] NumberFormatter failed, using robust fallback: '\(fallback)'")
+            print("🔍 [FORMAT PRICE] - amount: \(amount) -> formatted: \(formattedAmount)")
+            return fallback
+        }
+    }
+
+    private func formatDuration(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        let remainingSeconds = seconds % 60
+        return String(format: "%d:%02d", minutes, remainingSeconds)
+    }
 
     // MARK: - Private Methods
 
@@ -3139,6 +3219,14 @@ struct LiveAuctionPageView: View {
                 },
                 receiveValue: { (auctionData, itemsData) in
                     print("✅ [LiveAuctionPageView] Loaded auction: \(auctionData.title)")
+                    print("🆔 [LiveAuctionPageView] ===== AUCTION ID DEBUGGING =====")
+                    print("🆔 [LiveAuctionPageView] Parameter auctionId: '\(self.auctionId)'")
+                    print("🆔 [LiveAuctionPageView] Loaded auction._id: '\(auctionData._id)'")
+                    print("🆔 [LiveAuctionPageView] Are they equal? \(self.auctionId == auctionData._id)")
+                    if self.auctionId != auctionData._id {
+                        print("⚠️ [LiveAuctionPageView] AUCTION ID MISMATCH DETECTED!")
+                        print("⚠️ [LiveAuctionPageView] This could cause live streaming issues!")
+                    }
                     self.auction = auctionData
                     self.items = itemsData
                     self.viewerCount = auctionData.currentViewers
@@ -3152,22 +3240,62 @@ struct LiveAuctionPageView: View {
     }
 
     private func setupRealTimeUpdates() {
-        print("📡 [LiveAuctionPageView] Setting up real-time updates")
+        print("🚀 [LiveAuctionPageView] ===== SETTING UP REAL-TIME UPDATES =====")
+        print("🚀 [LiveAuctionPageView] Parameter Auction ID: '\(auctionId)'")
 
-        // Connect to auction
-        socketService.connectToAuction(auctionId)
+        // Use the correct auction ID - either the parameter or the loaded auction's _id
+        let effectiveAuctionId = !auctionId.isEmpty ? auctionId : (auction?._id ?? "")
+        print("🔌 [LiveAuctionPageView] Effective auction ID for Socket.IO: '\(effectiveAuctionId)'")
+
+        guard !effectiveAuctionId.isEmpty else {
+            print("❌ [LiveAuctionPageView] CRITICAL ERROR: No valid auction ID available!")
+            return
+        }
+
+        // Connect to auction via Socket.IO
+        print("🔌 [LiveAuctionPageView] Connecting to auction: \(effectiveAuctionId)")
+        SocketService.shared.connectToAuction(effectiveAuctionId)
+
+        // Join the auction room to receive broadcasts
+        SocketService.shared.joinAuction(effectiveAuctionId)
+        print("🏠 [LiveAuctionPageView] Joined auction room: \(effectiveAuctionId)")
 
         // Connection status
-        socketService.$connectionStatus
+        SocketService.shared.$connectionStatus
             .receive(on: DispatchQueue.main)
             .sink { status in
+                print("📡 [LiveAuctionPageView] Connection status: \(status)")
                 self.connectionStatus = status
             }
             .store(in: &cancellables)
 
-        // Viewer count updates
-        socketService.onViewerCountUpdate { update in
+        // Live frame updates (CRITICAL for live streaming)
+        SocketService.shared.onLiveFrame { liveFrame in
             DispatchQueue.main.async {
+                print("🎥 [LiveAuctionPageView] Received live frame for auction: \(liveFrame.auctionId)")
+                let checkAuctionId = !self.auctionId.isEmpty ? self.auctionId : (self.auction?._id ?? "")
+                if liveFrame.auctionId == checkAuctionId {
+                    print("✅ [LiveAuctionPageView] Live frame matches current auction - processing...")
+                    print("📊 [LiveAuctionPageView] Frame data size: \(liveFrame.imageData.count) characters")
+
+                    // Forward to WebRTC service for processing
+                    WebRTCService.shared.handleLiveFrame(liveFrame)
+                    print("📺 [LiveAuctionPageView] Live frame successfully forwarded to WebRTCService")
+
+                    // NEXT STEP: Final UI connection (needs compilation fix)
+                    print("🔧 [LiveAuctionPageView] Ready for final UI connection")
+                }
+            }
+        }
+        .store(in: &cancellables)
+
+        // TODO: Connect WebRTC service currentLiveFrame to UI
+        // For now, we have the frame processing working, next step is UI connection
+
+        // Viewer count updates
+        SocketService.shared.onViewerCountUpdate { update in
+            DispatchQueue.main.async {
+                print("👥 [LiveAuctionPageView] Viewer count update: \(update.viewerCount)")
                 if update.auctionId == self.auctionId {
                     self.viewerCount = update.viewerCount
                 }
@@ -3176,8 +3304,9 @@ struct LiveAuctionPageView: View {
         .store(in: &cancellables)
 
         // Bid updates
-        socketService.onBidUpdate { bidUpdate in
+        SocketService.shared.onBidUpdate { bidUpdate in
             DispatchQueue.main.async {
+                print("💰 [LiveAuctionPageView] Bid update for item: \(bidUpdate.itemId)")
                 if bidUpdate.auctionId == self.auctionId {
                     self.updateItemBid(bidUpdate)
                 }
@@ -3186,10 +3315,22 @@ struct LiveAuctionPageView: View {
         .store(in: &cancellables)
 
         // Timer events (item changes)
-        socketService.onTimerEvent { timerEvent in
+        SocketService.shared.onTimerEvent { timerEvent in
             DispatchQueue.main.async {
+                print("⏰ [LiveAuctionPageView] Timer event for auction: \(timerEvent.auctionId)")
                 if timerEvent.auctionId == self.auctionId {
                     self.handleTimerEvent(timerEvent)
+                }
+            }
+        }
+        .store(in: &cancellables)
+
+        // New item creation events
+        SocketService.shared.onNewItem { newItemData in
+            DispatchQueue.main.async {
+                print("🆕 [LiveAuctionPageView] New item created for auction: \(newItemData.auctionId)")
+                if newItemData.auctionId == self.auctionId {
+                    self.handleNewItem(newItemData)
                 }
             }
         }
@@ -3212,6 +3353,7 @@ struct LiveAuctionPageView: View {
                 bidIncrement: updatedItem.bidIncrement,
                 estimatedDuration: updatedItem.estimatedDuration,
                 itemEndTime: updatedItem.itemEndTime,
+                remainingSeconds: updatedItem.remainingSeconds,
                 status: updatedItem.status,
                 winnerId: updatedItem.winnerId,
                 winningBid: updatedItem.winningBid,
@@ -3232,12 +3374,12 @@ struct LiveAuctionPageView: View {
         print("💰 [LiveAuctionPageView] Bid updated: \(bidUpdate.bidderName) - $\(bidUpdate.bidAmount)")
     }
 
-    private func handleTimerEvent(_ timerEvent: TimerEvent) {
+    private func handleTimerEvent(_ timerEvent: TimerEventWithAction) {
         print("⏱️ [LiveAuctionPageView] Timer event: \(timerEvent.action) for item: \(timerEvent.itemId)")
 
         switch timerEvent.action {
         case "start":
-            // Update item status to active and set as current
+            // Check if item exists, if not create it from timer event data
             if let index = items.firstIndex(where: { $0._id == timerEvent.itemId }) {
                 let updatedItem = items[index]
                 items[index] = AuctionItem(
@@ -3251,6 +3393,7 @@ struct LiveAuctionPageView: View {
                     bidIncrement: updatedItem.bidIncrement,
                     estimatedDuration: updatedItem.estimatedDuration,
                     itemEndTime: timerEvent.endTime,
+                    remainingSeconds: timerEvent.remainingSeconds,
                     status: .active,
                     winnerId: updatedItem.winnerId,
                     winningBid: updatedItem.winningBid,
@@ -3262,6 +3405,33 @@ struct LiveAuctionPageView: View {
                     auctionOrder: updatedItem.auctionOrder
                 )
                 currentItem = items[index]
+            } else if let itemDetails = timerEvent.itemDetails {
+                // Create new item from timer event data (dynamic items)
+                print("🆕 [LiveAuctionPageView] Creating new dynamic item from timer_started event: \(itemDetails.name)")
+                let newItem = AuctionItem(
+                    _id: timerEvent.itemId,
+                    auctionId: timerEvent.auctionId,
+                    name: itemDetails.name,
+                    description: itemDetails.description ?? "",
+                    images: itemDetails.images ?? [],
+                    startingPrice: itemDetails.startingPrice,
+                    currentBid: itemDetails.currentBid,
+                    bidIncrement: itemDetails.bidIncrement ?? 1,
+                    estimatedDuration: itemDetails.estimatedDuration ?? 60,
+                    itemEndTime: timerEvent.endTime,
+                    remainingSeconds: timerEvent.remainingSeconds,
+                    status: .active,
+                    winnerId: nil,
+                    winningBid: nil,
+                    bidCount: 0,
+                    category: itemDetails.category ?? "General",
+                    condition: itemDetails.condition ?? "New",
+                    weight: itemDetails.weight,
+                    dimensions: itemDetails.dimensions,
+                    auctionOrder: items.count
+                )
+                items.append(newItem)
+                currentItem = newItem
             }
 
         case "end":
@@ -3281,6 +3451,7 @@ struct LiveAuctionPageView: View {
                     bidIncrement: updatedItem.bidIncrement,
                     estimatedDuration: updatedItem.estimatedDuration,
                     itemEndTime: updatedItem.itemEndTime,
+                    remainingSeconds: updatedItem.remainingSeconds,
                     status: finalStatus,
                     winnerId: updatedItem.winnerId,
                     winningBid: updatedItem.winningBid,
@@ -3298,8 +3469,79 @@ struct LiveAuctionPageView: View {
                 }
             }
 
+        case "update":
+            // Handle real-time timer countdown updates (like how price updates work)
+            if let index = items.firstIndex(where: { $0._id == timerEvent.itemId }) {
+                let updatedItem = items[index]
+                items[index] = AuctionItem(
+                    _id: updatedItem._id,
+                    auctionId: updatedItem.auctionId,
+                    name: updatedItem.name,
+                    description: updatedItem.description,
+                    images: updatedItem.images,
+                    startingPrice: updatedItem.startingPrice,
+                    currentBid: updatedItem.currentBid,
+                    bidIncrement: updatedItem.bidIncrement,
+                    estimatedDuration: updatedItem.estimatedDuration,
+                    itemEndTime: updatedItem.itemEndTime,
+                    remainingSeconds: timerEvent.remainingSeconds, // Real-time countdown from backend
+                    status: updatedItem.status,
+                    winnerId: updatedItem.winnerId,
+                    winningBid: updatedItem.winningBid,
+                    bidCount: updatedItem.bidCount,
+                    category: updatedItem.category,
+                    condition: updatedItem.condition,
+                    weight: updatedItem.weight,
+                    dimensions: updatedItem.dimensions,
+                    auctionOrder: updatedItem.auctionOrder
+                )
+
+                // Update current item if this is it
+                if currentItem?._id == timerEvent.itemId {
+                    currentItem = items[index]
+                }
+
+                print("⏰ [LiveAuctionPageView] Timer updated - Item: \(updatedItem.name), Remaining: \(timerEvent.remainingSeconds ?? -1)s")
+            }
+
         default:
             break
+        }
+    }
+
+    private func handleNewItem(_ newItemData: NewItemData) {
+        print("🆕 [LiveAuctionPageView] Processing new item: \(newItemData.item.name)")
+
+        // Check if item already exists to avoid duplicates
+        if !items.contains(where: { $0._id == newItemData.item._id }) {
+            // Add new item to items array
+            let newItem = AuctionItem(
+                _id: newItemData.item._id,
+                auctionId: newItemData.item.auctionId,
+                name: newItemData.item.name,
+                description: newItemData.item.description,
+                images: newItemData.item.images,
+                startingPrice: newItemData.item.startingPrice,
+                currentBid: newItemData.item.currentBid,
+                bidIncrement: newItemData.item.bidIncrement,
+                estimatedDuration: newItemData.item.estimatedDuration,
+                itemEndTime: newItemData.item.itemEndTime,
+                remainingSeconds: newItemData.item.remainingSeconds,
+                status: newItemData.item.status,
+                winnerId: newItemData.item.winnerId,
+                winningBid: newItemData.item.winningBid,
+                bidCount: newItemData.item.bidCount,
+                category: newItemData.item.category,
+                condition: newItemData.item.condition,
+                weight: newItemData.item.weight,
+                dimensions: newItemData.item.dimensions,
+                auctionOrder: newItemData.item.auctionOrder
+            )
+
+            items.append(newItem)
+            print("✅ [LiveAuctionPageView] New item added to items array. Total items: \(items.count)")
+        } else {
+            print("⚠️ [LiveAuctionPageView] Item already exists in items array")
         }
     }
 
@@ -3341,9 +3583,12 @@ struct AuctionTimerCompactView: View {
     }
 
     private func updateTimeRemaining() {
+        print("⏰ [AuctionTimerCompactView] Parsing endTime: '\(endTime)'")
         let formatter = ISO8601DateFormatter()
         guard let endDate = formatter.date(from: endTime) else {
+            print("❌ [AuctionTimerCompactView] Could not parse endTime: '\(endTime)'")
             timeRemaining = "--:--"
+            timer?.invalidate()
             return
         }
 
@@ -3417,7 +3662,7 @@ struct AuctionItemRowViewLive: View {
                         .foregroundColor(.green)
 
                     if isActive {
-                        Text("🔴 LIVE BIDDING NOW")
+                        Text("💀 LIVE BIDDING NOW")
                             .font(.caption)
                             .fontWeight(.bold)
                             .foregroundColor(.red)
@@ -3554,3 +3799,205 @@ struct ItemDetailSheet: View {
         }
     }
 }
+
+// MARK: - Live Stream Display View
+struct LiveStreamDisplayView: View {
+    let auctionId: String
+
+    @StateObject private var webRTCService = WebRTCService.shared
+    @State private var connectionStatus: String = "Connecting..."
+    @State private var cancellables = Set<AnyCancellable>()
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                // Background
+                Color.black
+
+                // Live Frame Display (connected to WebRTCService)
+                if let liveFrame = webRTCService.currentLiveFrame {
+                    Image(uiImage: liveFrame)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: geometry.size.width * 1.2, height: geometry.size.height * 1 )
+                        .clipped()
+                        .zIndex(100) // Highest priority for live frames
+                } else {
+                    // Connection status overlay when no live frame
+                    VStack(spacing: 16) {
+                        // Live indicator
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 12, height: 12)
+                                .scaleEffect(1.0)
+                                .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: true)
+
+                            Text("LIVE")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.primary.opacity(0.1))
+                        .cornerRadius(20)
+
+                        Text(connectionStatus)
+                            .font(.title2)
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+
+                        Text("Auction: \(auctionId)")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.6))
+                    }
+                    .padding()
+                }
+
+                // Seller Profile Overlay (Top Left)
+                VStack {
+                    HStack {
+                        sellerProfileHeader
+                            .padding(.top, 50)
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .zIndex(200) // Above video
+            }
+        }
+        .onAppear {
+            print("🎥 [LiveStreamDisplayView] ===== STARTING LIVE STREAM =====")
+            print("🎥 [LiveStreamDisplayView] Auction ID: '\(auctionId)'")
+            print("🎥 [LiveStreamDisplayView] Auction ID length: \(auctionId.count)")
+            print("🎥 [LiveStreamDisplayView] Auction ID isEmpty: \(auctionId.isEmpty)")
+            if auctionId.isEmpty {
+                print("❌ [LiveStreamDisplayView] CRITICAL ERROR: Empty auction ID!")
+                print("🔧 [LiveStreamDisplayView] Expected test auction ID: 69aea3b6b4cfbe2556e2c812")
+            }
+            setupLiveStreamConnection()
+        }
+    }
+
+    private func setupLiveStreamConnection() {
+        print("🔗 [LiveStreamDisplayView] Setting up live stream connection...")
+
+        // Update status
+        connectionStatus = "Connecting to live stream..."
+
+        // Monitor WebRTC connection state
+        webRTCService.$connectionState
+            .receive(on: DispatchQueue.main)
+            .sink { state in
+                switch state {
+                case .connecting:
+                    self.connectionStatus = "Connecting to live stream..."
+                case .connected:
+                    self.connectionStatus = "Live stream connected!"
+                case .disconnected:
+                    self.connectionStatus = "Connection lost. Reconnecting..."
+                case .closed:
+                    self.connectionStatus = "Waiting for seller to broadcast..."
+                }
+                print("🔔 [LiveStreamDisplayView] Connection status updated: \(self.connectionStatus)")
+            }
+            .store(in: &cancellables)
+
+        // Update initial status
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            if self.webRTCService.currentLiveFrame == nil {
+                self.connectionStatus = "Waiting for seller to broadcast..."
+            }
+        }
+
+        print("✅ [LiveStreamDisplayView] Live stream view ready and waiting for frames")
+    }
+
+    // MARK: - Seller Profile Header
+    private var sellerProfileHeader: some View {
+        HStack(spacing: 12) {
+            // Seller Profile Image
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [Color.blue.opacity(0.8), Color.purple.opacity(0.8)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 60, height: 60)
+                .overlay(
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(.white)
+                )
+                .shadow(radius: 4)
+
+            // Seller Info Section
+            VStack(alignment: .leading, spacing: 2) {
+                // Seller Name
+                HStack(spacing: 4) {
+                    Text("Mall Of Lebanon")
+                        .font(.caption)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+
+                    // Verification badge
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.caption2)
+                        .foregroundColor(.blue)
+                }
+
+                // Rating, Shipping, and Follow Button on same line
+                HStack(spacing: 8) {
+                    // Rating Section
+                    HStack(spacing: 2) {
+                        Image(systemName: "star.fill")
+                            .font(.caption2)
+                            .foregroundColor(.yellow)
+
+                        Text("4.8")
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white)
+
+                        Text("(245)")
+                            .font(.caption2)
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+
+                    // Shipping Info
+                    HStack(spacing: 2) {
+                        Image(systemName: "shippingbox.fill")
+                            .font(.caption2)
+                            .foregroundColor(.white.opacity(0.8))
+
+                        Text("3d")
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white)
+                    }
+
+                    // Follow Button
+                    Button(action: {
+                        print("🔔 [LiveStreamDisplayView] Follow button tapped")
+                    }) {
+                        Text("Follow")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color.orange)
+                            )
+                    }
+                }
+            }
+        }
+        .padding(12)
+    }
+}
+

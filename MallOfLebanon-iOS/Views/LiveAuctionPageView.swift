@@ -35,11 +35,106 @@ struct LiveAuctionPageView: View {
     // Real-time Updates
     @State private var viewerCount = 0
     @State private var connectionStatus = "Connecting..."
+    @State private var refreshTimer: Timer?
+
+    // Wallet and Bidding State
+    @State private var walletBalance: Double = 0.0
+    @State private var walletCurrency: String = "USD"
+    @State private var isLoadingWallet = false
+    @State private var isBidding = false
+    @State private var bidAmount: Double = 0.0
+    @State private var showBidConfirmation = false
+    @State private var bidButtonScale: CGFloat = 1.0
+
+    // Computed property to always show an item (current or most recent)
+    private var displayItem: AuctionItem? {
+        // First priority: current active item
+        if let current = currentItem {
+            return current
+        }
+
+        // Second priority: most recently ended item (sold or unsold)
+        return items.filter { $0.status == .sold || $0.status == .unsold }
+                   .sorted { first, second in
+                       // Sort by auction order descending to get most recent
+                       (first.auctionOrder ?? 0) > (second.auctionOrder ?? 0)
+                   }
+                   .first
+    }
+
+    // MARK: - Wallet and Bidding Functions
+
+    private func loadWalletBalance() {
+        isLoadingWallet = true
+        auctionService.getAuctionWallet()
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    self.isLoadingWallet = false
+                    if case .failure(let error) = completion {
+                        print("❌ [LiveAuctionPageView] Failed to load wallet: \(error)")
+                    }
+                },
+                receiveValue: { wallet in
+                    self.walletBalance = wallet.availableBalance
+                    self.walletCurrency = wallet.currency
+                    print("💰 [LiveAuctionPageView] Wallet loaded: \(wallet.availableBalance) \(wallet.currency)")
+                }
+            )
+            .store(in: &cancellables)
+    }
+
+    private func attemptBid(on item: AuctionItem) {
+        guard let auction = auction else { return }
+
+        let nextBidAmount = item.nextMinimumBid
+        bidAmount = nextBidAmount
+
+        // Animation for bid button
+        withAnimation(.easeInOut(duration: 0.1)) {
+            bidButtonScale = 1.2
+        }
+
+        withAnimation(.easeInOut(duration: 0.1).delay(0.1)) {
+            bidButtonScale = 1.0
+        }
+
+        // Check wallet balance first
+        if walletBalance < nextBidAmount {
+            print("❌ [LiveAuctionPageView] Insufficient wallet balance. Required: \(nextBidAmount), Available: \(walletBalance)")
+            showBidConfirmation = true
+            return
+        }
+
+        // Proceed with bid
+        isBidding = true
+
+        auctionService.placeBid(
+            auctionId: auction._id,
+            itemId: item._id,
+            amount: nextBidAmount
+        )
+        .receive(on: DispatchQueue.main)
+        .sink(
+            receiveCompletion: { completion in
+                self.isBidding = false
+                if case .failure(let error) = completion {
+                    print("❌ [LiveAuctionPageView] Bid failed: \(error)")
+                }
+            },
+            receiveValue: { bidResponse in
+                print("✅ [LiveAuctionPageView] Bid placed successfully: \(bidResponse.newBidAmount) \(bidResponse.currency)")
+                // Reload wallet balance after successful bid
+                self.loadWalletBalance()
+            }
+        )
+        .store(in: &cancellables)
+    }
 
     var body: some View {
         ZStack {
-            // Full-screen background - completely black including status bar area
-            Color.black
+            // Full-screen background - white/system background
+            Color(.systemBackground)
                 .ignoresSafeArea(.all)
                 .edgesIgnoringSafeArea(.all)
 
@@ -58,9 +153,12 @@ struct LiveAuctionPageView: View {
         .onAppear {
             loadAuctionData()
             setupRealTimeUpdates()
+            loadWalletBalance()
+            startPeriodicRefresh()
         }
         .onDisappear {
             cleanup()
+            stopPeriodicRefresh()
         }
         .sheet(isPresented: $showingBiddingSheet) {
             if let auction = auction, let item = currentItem {
@@ -80,6 +178,14 @@ struct LiveAuctionPageView: View {
         }
         .sheet(isPresented: $showingWalletSheet) {
             WalletSheet()
+        }
+        .alert("Insufficient Balance", isPresented: $showBidConfirmation) {
+            Button("OK") { }
+            Button("Add Funds") {
+                showingWalletSheet = true
+            }
+        } message: {
+            Text("You need \(formatPrice(bidAmount, walletCurrency)) to place this bid, but only have \(formatPrice(walletBalance, walletCurrency)) available.")
         }
     }
 
@@ -132,9 +238,10 @@ struct LiveAuctionPageView: View {
                 auctionId: auctionId,
                 auctionTitle: auction.title
             )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .ignoresSafeArea(.all)
-            .clipped()
+            .frame(width: UIScreen.main.bounds.width * 0.6, height: UIScreen.main.bounds.height * 0.6)
+            .cornerRadius(20)
+            .background(Color(.systemBackground))
+            .position(x: UIScreen.main.bounds.width / 2, y: UIScreen.main.bounds.height / 2)
 
             // Floating overlays (foreground layer)
             if showingControls {
@@ -187,17 +294,17 @@ struct LiveAuctionPageView: View {
                     Text(auction.status.displayName)
                         .font(.caption)
                         .fontWeight(.semibold)
-                        .shadow(color: .black, radius: 1, x: 0, y: 0)
+                        .shadow(color: .primary.opacity(0.3), radius: 1, x: 0, y: 0)
                 }
 
                 HStack(spacing: 6) {
                     Image(systemName: "eye.fill")
                         .font(.caption)
-                        .shadow(color: .black, radius: 1, x: 0, y: 0)
+                        .shadow(color: .primary.opacity(0.3), radius: 1, x: 0, y: 0)
                     Text("\(viewerCount)")
                         .font(.caption)
                         .fontWeight(.medium)
-                        .shadow(color: .black, radius: 1, x: 0, y: 0)
+                        .shadow(color: .primary.opacity(0.3), radius: 1, x: 0, y: 0)
 
                     // Down arrow button - enhanced visibility
                     Button(action: {
@@ -212,9 +319,9 @@ struct LiveAuctionPageView: View {
                             .frame(width: 24, height: 24)
                             .background(
                                 Circle()
-                                    .fill(Color.black.opacity(0.3))
+                                    .fill(Color.primary.opacity(0.2))
                             )
-                            .shadow(color: .black, radius: 2, x: 0, y: 0)
+                            .shadow(color: .primary.opacity(0.3), radius: 2, x: 0, y: 0)
                     }
                 }
             }
@@ -234,89 +341,178 @@ struct LiveAuctionPageView: View {
     // MARK: - Auction Item Display
     private func auctionItemDisplay(_ auction: LiveAuction) -> some View {
         VStack(spacing: 12) {
-            // Main item info row
-            HStack(spacing: 16) {
-                // Left side - Item image
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.yellow.opacity(0.9))
-                    .frame(width: 80, height: 80)
-                    .overlay(
-                        Text("XS")
-                            .font(.title)
-                            .fontWeight(.bold)
-                            .foregroundColor(.black)
-                    )
+            // Always show an item - either current active item or most recent item
+            if let item = displayItem {
+                // Main item info row with real data
+                HStack(spacing: 16) {
+                    // Left side - Item image
+                    if let imageUrl = item.primaryImageURL {
+                        CachedImageView(
+                            url: URL(string: imageUrl),
+                            placeholder: { ProgressView().scaleEffect(0.5) },
+                            failureView: {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color.gray.opacity(0.3))
+                                    .overlay(
+                                        Image(systemName: "photo")
+                                            .foregroundColor(.gray)
+                                    )
+                            }
+                        )
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 80, height: 80)
+                        .clipped()
+                        .cornerRadius(8)
+                    } else {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.yellow.opacity(0.9))
+                            .frame(width: 80, height: 80)
+                            .overlay(
+                                Text(String(item.name.prefix(2)).uppercased())
+                                    .font(.title)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.black)
+                            )
+                    }
 
-                // Middle - Item details
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("XS-XSMALL PULL #191")
+                    // Middle - Item details
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.name)
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+
+                        Text(item.condition ?? "Live Auction")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.8))
+
+                        HStack(spacing: 4) {
+                            Text("🇱🇧")
+                            Text("Starting: \(formatPrice(item.startingPrice, auction.currency))")
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.9))
+                        }
+                    }
+
+                    Spacer()
+
+                    // Right side - Price and timer
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text(formatPrice(33, auction.currency))
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                            .onAppear {
+                                print("💰 [FORCE TEST] Forcing price to show 33")
+                                print("💰 [DEBUG] Item data: currentBid=\(item.currentBid ?? -999), startingPrice=\(item.startingPrice)")
+                                print("💰 [DEBUG] Raw startingPrice type: \(type(of: item.startingPrice)), value: '\(item.startingPrice)'")
+                            }
+
+                        if let endTime = item.itemEndTime {
+                            // Show timer for both active and ended items
+                            print("⏰ [LiveAuctionPageView] Timer display - Item: \(item.name), EndTime: '\(endTime)' (Length: \(endTime.count)), Status: \(item.status)")
+                            if item.status == .active {
+                                HStack(spacing: 2) {
+                                    Text("💀")
+                                    AuctionTimerCompactView(endTime: endTime)
+                                }
+                            } else {
+                                HStack(spacing: 2) {
+                                    Text(item.status == .sold ? "✅" : "💀")
+                                    AuctionTimerCompactView(endTime: endTime)
+                                }
+                            }
+                        } else {
+                            print("⚠️ [LiveAuctionPageView] NO TIMER - Item: \(item.name), EndTime: nil, Status: \(item.status), EstimatedDuration: \(item.estimatedDuration ?? -999)")
+
+                            // No timer data - wait for backend to provide timer instead of hardcoded countdown
+                            Text("--:--")
+                                .font(.caption2)
+                                .fontWeight(.medium)
+                                .foregroundColor(.gray)
+                            .onAppear {
+                                print("⏰ [NO TIMER] No timer data from backend yet, showing placeholder")
+                                print("⏰ [DEBUG] Item status: \(item.status), itemEndTime: \(item.itemEndTime ?? "nil")")
+                            }
+                        }
+                    }
+                }
+
+                // Bottom buttons row
+                HStack(spacing: 12) {
+                    // Custom button
+                    Button(action: {
+                        print("🎛️ Custom button tapped")
+                    }) {
+                        Text("Custom")
+                            .font(.headline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 12)
+                            .background(Color.primary.opacity(0.1))
+                            .cornerRadius(25)
+                    }
+
+                    // Enhanced Bid button with wallet integration and animation
+                    Button(action: {
+                        if item.status == .active {
+                            attemptBid(on: item)
+                            print("💰 Bid button tapped for item: \(item.name)")
+                        } else {
+                            print("📝 Cannot bid on ended item: \(item.name)")
+                        }
+                    }) {
+                        HStack {
+                            if isBidding {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .foregroundColor(.primary)
+                                Text("Placing Bid...")
+                            } else if item.status == .active {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "dollarsign.circle.fill")
+                                    let _ = print("🔍 [BID CALC DEBUG] ===== BID CALCULATION =====")
+                                    let _ = print("🔍 [BID CALC DEBUG] Item: \(item.name)")
+                                    let _ = print("🔍 [BID CALC DEBUG] currentBid: \(item.currentBid ?? -999)")
+                                    let _ = print("🔍 [BID CALC DEBUG] startingPrice: \(item.startingPrice)")
+                                    let _ = print("🔍 [BID CALC DEBUG] bidIncrement: \(item.bidIncrement)")
+                                    let _ = print("🔍 [BID CALC DEBUG] Calculation: (\(item.currentBid ?? item.startingPrice)) + \(item.bidIncrement)")
+                                    let _ = print("🔍 [BID CALC DEBUG] nextMinimumBid: \(item.nextMinimumBid)")
+                                    let _ = print("🔍 [BID CALC DEBUG] ================================")
+                                    Text("DEBUG: cb=\(item.currentBid ?? -999) sp=\(item.startingPrice) bi=\(item.bidIncrement) nmb=\(item.nextMinimumBid)")
+                                        .font(.caption)
+                                        .fixedSize()
+                                    if walletBalance > 0 {
+                                        Text("(Balance: \(formatPrice(walletBalance, walletCurrency)))")
+                                            .font(.caption)
+                                            .opacity(0.7)
+                                    }
+                                }
+                            } else {
+                                Text(item.status == .sold ? "SOLD" : "ENDED")
+                            }
+                            if item.status == .active && !isBidding {
+                                Image(systemName: "chevron.right.2")
+                            }
+                        }
                         .font(.headline)
                         .fontWeight(.semibold)
-                        .foregroundColor(.white)
-
-                    Text("Open-box")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.8))
-
-                    HStack(spacing: 4) {
-                        Text("🇱🇧")
-                        Text("US$38.24 Int Shipping + Taxes")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.9))
-                    }
-                }
-
-                Spacer()
-
-                // Right side - Price and timer
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("US$2")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-
-                    HStack(spacing: 4) {
-                        Text("💀")
-                        Text("00:01")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundColor(.red)
-                    }
-                }
-            }
-
-            // Bottom buttons row
-            HStack(spacing: 12) {
-                // Custom button
-                Button(action: {
-                    print("🎛️ Custom button tapped")
-                }) {
-                    Text("Custom")
-                        .font(.headline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 20)
+                        .foregroundColor(item.status == .active ? .primary : .white)
+                        .padding(.horizontal, 24)
                         .padding(.vertical, 12)
-                        .background(Color.black.opacity(0.7))
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            item.status == .active ?
+                            (walletBalance >= item.nextMinimumBid ? Color.green.opacity(0.8) : Color.orange.opacity(0.8)) :
+                            Color.gray.opacity(0.6)
+                        )
                         .cornerRadius(25)
-                }
-
-                // Bid button
-                Button(action: {
-                    print("💰 Bid button tapped")
-                }) {
-                    HStack {
-                        Text("Bid: US$3")
-                        Image(systemName: "chevron.right.2")
+                        .scaleEffect(bidButtonScale)
+                        .animation(.easeInOut(duration: 0.1), value: bidButtonScale)
                     }
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
-                    .frame(maxWidth: .infinity)
-                    .background(Color.yellow)
-                    .cornerRadius(25)
+                    .disabled(item.status != .active || isBidding)
                 }
             }
         }
@@ -341,16 +537,16 @@ struct LiveAuctionPageView: View {
                         .font(.title2)
                         .fontWeight(.bold)
                         .foregroundColor(.white)
-                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+                        .shadow(color: .primary.opacity(0.3), radius: 2, x: 0, y: 0)
 
                     Text("More")
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundColor(.white)
-                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+                        .shadow(color: .primary.opacity(0.3), radius: 2, x: 0, y: 0)
                 }
                 .padding(8)
-                .background(Color.black.opacity(0.5))
+                .background(Color.secondary.opacity(0.2))
                 .cornerRadius(8)
             }
 
@@ -363,16 +559,16 @@ struct LiveAuctionPageView: View {
                         .font(.title2)
                         .fontWeight(.bold)
                         .foregroundColor(.white)
-                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+                        .shadow(color: .primary.opacity(0.3), radius: 2, x: 0, y: 0)
 
                     Text("Clip")
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundColor(.white)
-                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+                        .shadow(color: .primary.opacity(0.3), radius: 2, x: 0, y: 0)
                 }
                 .padding(8)
-                .background(Color.black.opacity(0.5))
+                .background(Color.secondary.opacity(0.2))
                 .cornerRadius(8)
             }
 
@@ -386,16 +582,16 @@ struct LiveAuctionPageView: View {
                         .font(.title2)
                         .fontWeight(.bold)
                         .foregroundColor(.white)
-                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+                        .shadow(color: .primary.opacity(0.3), radius: 2, x: 0, y: 0)
 
                     Text("Share")
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundColor(.white)
-                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+                        .shadow(color: .primary.opacity(0.3), radius: 2, x: 0, y: 0)
                 }
                 .padding(8)
-                .background(Color.black.opacity(0.5))
+                .background(Color.secondary.opacity(0.2))
                 .cornerRadius(8)
             }
 
@@ -409,16 +605,16 @@ struct LiveAuctionPageView: View {
                         .font(.title2)
                         .fontWeight(.bold)
                         .foregroundColor(.white)
-                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+                        .shadow(color: .primary.opacity(0.3), radius: 2, x: 0, y: 0)
 
                     Text("Wallet")
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundColor(.white)
-                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+                        .shadow(color: .primary.opacity(0.3), radius: 2, x: 0, y: 0)
                 }
                 .padding(8)
-                .background(Color.black.opacity(0.5))
+                .background(Color.secondary.opacity(0.2))
                 .cornerRadius(8)
             }
 
@@ -431,16 +627,16 @@ struct LiveAuctionPageView: View {
                         .font(.title2)
                         .fontWeight(.bold)
                         .foregroundColor(.white)
-                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+                        .shadow(color: .primary.opacity(0.3), radius: 2, x: 0, y: 0)
 
                     Text("Shop")
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundColor(.white)
-                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+                        .shadow(color: .primary.opacity(0.3), radius: 2, x: 0, y: 0)
                 }
                 .padding(8)
-                .background(Color.black.opacity(0.5))
+                .background(Color.secondary.opacity(0.2))
                 .cornerRadius(8)
             }
         }
@@ -453,69 +649,7 @@ struct LiveAuctionPageView: View {
         }
     }
 
-    private func currentItemFloatingBanner(_ item: AuctionItem) -> some View {
-        HStack(spacing: 12) {
-            // Item Thumbnail
-            if let imageUrl = item.primaryImageURL {
-                CachedImageView(
-                    url: URL(string: imageUrl),
-                    placeholder: { ProgressView().scaleEffect(0.5) },
-                    failureView: {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.gray.opacity(0.3))
-                            .overlay(
-                                Image(systemName: "photo")
-                                    .foregroundColor(.gray)
-                            )
-                    }
-                )
-                .aspectRatio(contentMode: .fill)
-                .frame(width: 50, height: 50)
-                .clipped()
-                .cornerRadius(8)
-            }
-
-            // Item Info
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("🔴 LIVE")
-                        .font(.caption2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.red)
-
-                    // Timer if available
-                    if let endTime = item.itemEndTime {
-                        AuctionTimerCompactView(endTime: endTime)
-                    }
-                }
-
-                Text(item.name)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .lineLimit(1)
-                    .foregroundColor(.white)
-
-                HStack(spacing: 12) {
-                    Text("Current: $\(String(format: "%.0f", item.currentBid ?? item.startingPrice))")
-                        .font(.caption)
-                        .foregroundColor(.green)
-
-                    Text("Next: $\(String(format: "%.0f", item.nextMinimumBid))")
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                }
-            }
-
-            Spacer()
-        }
-        .padding()
-        .background(Color.black.opacity(0.8))
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.red.opacity(0.6), lineWidth: 1)
-        )
-    }
+    // Floating banner function removed as requested
 
     // MARK: - Overlay Views
 
@@ -553,14 +687,40 @@ struct LiveAuctionPageView: View {
         }
 
         private func updateTimeRemaining() {
+            // Try multiple date formats to parse the endTime
             let formatter = ISO8601DateFormatter()
-            guard let endDate = formatter.date(from: endTime) else {
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+            print("🕐 [AuctionTimerCompactView] Parsing endTime: '\(endTime)'")
+
+            var endDate: Date?
+
+            // Try with fractional seconds first (e.g., 2026-04-04T14:29:55.288Z)
+            endDate = formatter.date(from: endTime)
+
+            // If that fails, try without fractional seconds
+            if endDate == nil {
+                formatter.formatOptions = [.withInternetDateTime]
+                endDate = formatter.date(from: endTime)
+            }
+
+            // If still nil, try a basic date formatter as fallback
+            if endDate == nil {
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"
+                dateFormatter.timeZone = TimeZone(abbreviation: "UTC")
+                endDate = dateFormatter.date(from: endTime)
+            }
+
+            guard let finalEndDate = endDate else {
+                print("❌ [AuctionTimerCompactView] Failed to parse endTime: '\(endTime)'")
                 timeRemaining = "--:--"
                 return
             }
+            print("✅ [AuctionTimerCompactView] Successfully parsed endTime to: \(finalEndDate)")
 
             let now = Date()
-            let interval = endDate.timeIntervalSince(now)
+            let interval = finalEndDate.timeIntervalSince(now)
 
             if interval <= 0 {
                 timeRemaining = "ENDED"
@@ -571,6 +731,31 @@ struct LiveAuctionPageView: View {
             let minutes = Int(interval) / 60
             let seconds = Int(interval) % 60
             timeRemaining = String(format: "%02d:%02d", minutes, seconds)
+        }
+    }
+
+    // MARK: - Helper Methods
+
+    private func formatPrice(_ amount: Double, _ currency: String) -> String {
+        print("🔍 [LIVE FORMAT PRICE] Input: amount=\(amount), currency='\(currency)'")
+
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = currency.uppercased()
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 0
+        formatter.locale = Locale(identifier: "en_US")
+
+        if let formattedString = formatter.string(from: NSNumber(value: amount)) {
+            print("🔍 [LIVE FORMAT PRICE] NumberFormatter success: '\(formattedString)'")
+            return formattedString
+        } else {
+            // More robust fallback - use proper string formatting
+            let formattedAmount = String(format: "%.0f", amount)
+            let fallback = "$\(formattedAmount)"
+            print("🔍 [LIVE FORMAT PRICE] NumberFormatter failed, using robust fallback: '\(fallback)'")
+            print("🔍 [LIVE FORMAT PRICE] - amount: \(amount) -> formatted: \(formattedAmount)")
+            return fallback
         }
     }
 
@@ -612,6 +797,10 @@ struct LiveAuctionPageView: View {
         // Connect to auction
         socketService.connectToAuction(auctionId)
 
+        // Join the auction room to receive broadcasts
+        socketService.joinAuction(auctionId)
+        print("🏠 [LiveAuctionPageView] Joined auction room: \(auctionId)")
+
         // Connection status
         socketService.$connectionStatus
             .receive(on: DispatchQueue.main)
@@ -645,6 +834,16 @@ struct LiveAuctionPageView: View {
             DispatchQueue.main.async {
                 if timerEvent.auctionId == self.auctionId {
                     self.handleTimerEvent(timerEvent)
+                }
+            }
+        }
+        .store(in: &cancellables)
+
+        // New item events (when seller creates new items)
+        socketService.onNewItem { newItemData in
+            DispatchQueue.main.async {
+                if newItemData.auctionId == self.auctionId {
+                    self.handleNewItem(newItemData)
                 }
             }
         }
@@ -687,13 +886,51 @@ struct LiveAuctionPageView: View {
         print("💰 [LiveAuctionPageView] Bid updated: \(bidUpdate.bidderName) - $\(bidUpdate.bidAmount)")
     }
 
-    private func handleTimerEvent(_ timerEvent: TimerEvent) {
+    private func handleNewItem(_ newItemData: NewItemData) {
+        print("🆕 [LiveAuctionPageView] New item created: \(newItemData.item.name)")
+        print("⏱️ [LiveAuctionPageView] New item timer data - EstimatedDuration: \(newItemData.item.estimatedDuration ?? 0), ItemEndTime: \(newItemData.item.itemEndTime ?? "nil"), Status: \(newItemData.item.status)")
+
+        // Add the new item to the items array
+        let newAuctionItem = AuctionItem(
+            _id: newItemData.item._id,
+            auctionId: newItemData.item.auctionId,
+            name: newItemData.item.name,
+            description: newItemData.item.description,
+            images: newItemData.item.images,
+            startingPrice: newItemData.item.startingPrice,
+            currentBid: newItemData.item.currentBid,
+            bidIncrement: newItemData.item.bidIncrement,
+            estimatedDuration: newItemData.item.estimatedDuration,
+            itemEndTime: newItemData.item.itemEndTime,
+            status: newItemData.item.status,
+            winnerId: newItemData.item.winnerId,
+            winningBid: newItemData.item.winningBid,
+            bidCount: newItemData.item.bidCount,
+            category: newItemData.item.category,
+            condition: newItemData.item.condition,
+            weight: newItemData.item.weight,
+            dimensions: newItemData.item.dimensions,
+            auctionOrder: newItemData.item.auctionOrder
+        )
+
+        // Add to items array
+        items.append(newAuctionItem)
+
+        // If this is an active item, set it as current
+        if newAuctionItem.status == .active {
+            currentItem = newAuctionItem
+        }
+    }
+
+    private func handleTimerEvent(_ timerEvent: TimerEventWithAction) {
         print("⏱️ [LiveAuctionPageView] Timer event: \(timerEvent.action) for item: \(timerEvent.itemId)")
+        print("⏱️ [LiveAuctionPageView] Timer event data - StartTime: \(timerEvent.startTime ?? "nil"), EndTime: \(timerEvent.endTime ?? "nil")")
 
         switch timerEvent.action {
         case "start":
-            // Update item status to active and set as current
+            // Check if item exists, if not create it from timer event data
             if let index = items.firstIndex(where: { $0._id == timerEvent.itemId }) {
+                // Update existing item
                 let updatedItem = items[index]
                 items[index] = AuctionItem(
                     _id: updatedItem._id,
@@ -717,6 +954,36 @@ struct LiveAuctionPageView: View {
                     auctionOrder: updatedItem.auctionOrder
                 )
                 currentItem = items[index]
+            } else if let itemDetails = timerEvent.itemDetails {
+                // Create new item from timer event data (dynamic items)
+                print("🆕 [LiveAuctionPageView] Creating new dynamic item from timer_started event: \(itemDetails.name)")
+                let newItem = AuctionItem(
+                    _id: itemDetails._id,
+                    auctionId: timerEvent.auctionId,
+                    name: itemDetails.name,
+                    description: itemDetails.description,
+                    images: itemDetails.images,
+                    startingPrice: itemDetails.startingPrice,
+                    currentBid: itemDetails.currentBid,
+                    bidIncrement: itemDetails.bidIncrement,
+                    estimatedDuration: timerEvent.duration,
+                    itemEndTime: timerEvent.endTime,
+                    status: .active,
+                    winnerId: itemDetails.winnerId,
+                    winningBid: itemDetails.winningBid,
+                    bidCount: itemDetails.bidCount,
+                    category: itemDetails.category,
+                    condition: itemDetails.condition,
+                    weight: itemDetails.weight,
+                    dimensions: itemDetails.dimensions,
+                    auctionOrder: itemDetails.auctionOrder
+                )
+
+                // Add to items array and set as current
+                items.append(newItem)
+                currentItem = newItem
+
+                print("✅ [LiveAuctionPageView] Dynamic item \"\(itemDetails.name)\" added and set as current")
             }
 
         case "end":
@@ -761,6 +1028,60 @@ struct LiveAuctionPageView: View {
     private func cleanup() {
         print("🧹 [LiveAuctionPageView] Cleaning up")
         cancellables.removeAll()
+    }
+
+    // MARK: - Periodic Refresh for Real-time Updates
+
+    private func startPeriodicRefresh() {
+        print("🔄 [LiveAuctionPageView] Starting periodic refresh every 3 seconds")
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { _ in
+            self.refreshAuctionData()
+        }
+    }
+
+    private func stopPeriodicRefresh() {
+        print("🛑 [LiveAuctionPageView] Stopping periodic refresh")
+        refreshTimer?.invalidate()
+        refreshTimer = nil
+    }
+
+    private func refreshAuctionData() {
+        print("🔄 [LiveAuctionPageView] Refreshing auction data...")
+
+        auctionService.getAuctionDetails(auctionId: auctionId)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    if case .failure(let error) = completion {
+                        print("❌ [LiveAuctionPageView] Refresh error: \(error)")
+                    }
+                },
+                receiveValue: { (auctionData, itemsData) in
+                    print("✅ [LiveAuctionPageView] Refreshed auction data")
+
+                    // Update auction data
+                    self.auction = auctionData
+                    self.viewerCount = auctionData.currentViewers
+
+                    // Update items array with new data
+                    self.items = itemsData
+
+                    // Find and update current active item
+                    if let activeItem = itemsData.first(where: { $0.status == .active }) {
+                        self.currentItem = activeItem
+                        print("🎯 [LiveAuctionPageView] Updated active item: \(activeItem.name) - Price: \(activeItem.currentBid ?? activeItem.startingPrice)")
+                    }
+
+                    // Ensure we have a display item even if no active item
+                    if self.currentItem == nil {
+                        // Get the most recent item
+                        if let recentItem = itemsData.last {
+                            print("📦 [LiveAuctionPageView] No active item, showing recent: \(recentItem.name)")
+                        }
+                    }
+                }
+            )
+            .store(in: &cancellables)
     }
 }
 
@@ -815,12 +1136,12 @@ struct AuctionItemRowView: View {
                         statusBadge(item.status)
                     }
 
-                    Text("Current: $\(String(format: "%.0f", item.currentBid ?? item.startingPrice))")
+                    Text("Current: $\(String(format: "%.0f", item.displayPrice))")
                         .font(.subheadline)
                         .foregroundColor(.green)
 
                     if isActive {
-                        Text("🔴 LIVE BIDDING NOW")
+                        Text("💀 LIVE BIDDING NOW")
                             .font(.caption)
                             .fontWeight(.bold)
                             .foregroundColor(.red)
@@ -936,7 +1257,7 @@ struct ItemDetailSheet: View {
                                     Text("Current Bid")
                                         .font(.caption)
                                         .foregroundColor(.secondary)
-                                    Text("$\(String(format: "%.0f", item.currentBid ?? item.startingPrice))")
+                                    Text("$\(String(format: "%.0f", item.displayPrice))")
                                         .font(.title3)
                                         .fontWeight(.semibold)
                                         .foregroundColor(.green)
@@ -1051,7 +1372,7 @@ struct ShareOptionsSheet: View {
                                 .frame(width: 60, height: 60)
 
                             Circle()
-                                .fill(Color.black)
+                                .fill(Color.primary)
                                 .frame(width: 50, height: 50)
                                 .overlay(
                                     Image(systemName: "crown.fill")
@@ -1067,7 +1388,7 @@ struct ShareOptionsSheet: View {
 
                             // Live stream card
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.black)
+                                .fill(Color.primary)
                                 .frame(height: 120)
                                 .overlay(
                                     VStack(spacing: 8) {
@@ -1250,7 +1571,7 @@ struct WalletSheet: View {
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
-                        .background(Color.black)
+                        .background(Color(.systemBackground))
                         .foregroundColor(.white)
                         .cornerRadius(20)
                     }
@@ -1314,6 +1635,65 @@ struct WalletSheet: View {
 }
 
 // MARK: - Preview
+
+// MARK: - Simple Countdown Timer (for estimatedDuration fallback)
+
+struct SimpleCountdownTimer: View {
+    let initialSeconds: Int
+    @State private var remainingSeconds: Int = 0
+    @State private var timer: Timer?
+
+    init(initialSeconds: Int) {
+        self.initialSeconds = initialSeconds
+        self._remainingSeconds = State(initialValue: initialSeconds)
+    }
+
+    private var formattedTime: String {
+        let minutes = remainingSeconds / 60
+        let seconds = remainingSeconds % 60
+        return String(format: "%02d:%02d", minutes, seconds)
+    }
+
+    private var timerColor: Color {
+        if remainingSeconds <= 0 { return .red }
+        if remainingSeconds <= 30 { return .red }
+        if remainingSeconds <= 60 { return .orange }
+        return .green
+    }
+
+    var body: some View {
+        Text(remainingSeconds <= 0 ? "ENDED" : formattedTime)
+            .font(.caption)
+            .fontWeight(.medium)
+            .foregroundColor(timerColor)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(timerColor.opacity(0.2))
+            .cornerRadius(4)
+            .onAppear {
+                startCountdown()
+            }
+            .onDisappear {
+                stopCountdown()
+            }
+    }
+
+    private func startCountdown() {
+        print("⏱️ [SimpleCountdownTimer] Starting countdown with \(remainingSeconds) seconds")
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            if remainingSeconds > 0 {
+                remainingSeconds -= 1
+            } else {
+                stopCountdown()
+            }
+        }
+    }
+
+    private func stopCountdown() {
+        timer?.invalidate()
+        timer = nil
+    }
+}
 
 struct LiveAuctionPageView_Previews: PreviewProvider {
     static var previews: some View {

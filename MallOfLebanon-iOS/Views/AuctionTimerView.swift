@@ -199,7 +199,7 @@ struct AuctionTimerView: View {
     private var timerStatusText: String {
         switch timerState {
         case .running:
-            return timeRemaining <= 30 ? "⚠️ Closing Soon!" : "🔴 Live Bidding"
+            return timeRemaining <= 30 ? "⚠️ Closing Soon!" : "💀 Live Bidding"
         case .paused:
             return "⏸️ Paused"
         case .finished:

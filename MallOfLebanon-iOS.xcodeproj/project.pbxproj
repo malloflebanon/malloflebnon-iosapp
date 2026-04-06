@@ -27,11 +27,8 @@
 		EA4454B42EE49F7900AB485C /* KeychainManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA4454902EE49F7900AB485C /* KeychainManager.swift */; };
 		EA4454B62EE49F7900AB485C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EA44548A2EE49F7900AB485C /* Assets.xcassets */; };
 		EA4454B72EE49F7900AB485C /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EA4454962EE49F7900AB485C /* Preview Assets.xcassets */; };
-		EA5023262F391EFA00B64D18 /* WebRTCService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA5023252F391EFA00B64D18 /* WebRTCService.swift */; };
-		EA5023282F391F0A00B64D18 /* SocketService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA5023272F391F0A00B64D18 /* SocketService.swift */; };
-		EA50232B2F391F1E00B64D18 /* WebRTCVideoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA50232A2F391F1E00B64D18 /* WebRTCVideoView.swift */; };
-		EA50232C2F391F1E00B64D18 /* WebRTCLiveStreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA5023292F391F1E00B64D18 /* WebRTCLiveStreamView.swift */; };
-		EA8843A12F392F3F0059D5BB /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = EA8843A02F392F3F0059D5BB /* WebRTC */; };
+		EA5F7EE42F62E81B000F6540 /* SocketService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA5F7EE32F62E81B000F6540 /* SocketService.swift */; };
+		EA5F7EE62F62EB8D000F6540 /* WebRTCService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA5F7EE52F62EB8D000F6540 /* WebRTCService.swift */; };
 		EABDBCC82EF1F3FC00D9D66B /* ProductDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EABDBCC72EF1F3FC00D9D66B /* ProductDetailViewModel.swift */; };
 		EABDBCCA2EF1F42800D9D66B /* CartProductModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EABDBCC92EF1F42800D9D66B /* CartProductModels.swift */; };
 		EABDBCCE2EF1F44700D9D66B /* ProductDetailComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = EABDBCCB2EF1F44700D9D66B /* ProductDetailComponents.swift */; };
@@ -41,6 +38,7 @@
 		EABDBCD52EF1FE2900D9D66B /* CheckoutComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = EABDBCD32EF1FE2900D9D66B /* CheckoutComponents.swift */; };
 		EAF247332EFC0C390027BB44 /* OrdersViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAF247322EFC0C390027BB44 /* OrdersViewModel.swift */; };
 		EAF247362EFC0C700027BB44 /* OrdersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAF247342EFC0C700027BB44 /* OrdersView.swift */; };
+		EAFC9B842F5199690007030B /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAFC9B832F5199690007030B /* SearchView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -66,10 +64,8 @@
 		EA44549F2EE49F7900AB485C /* ProductListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductListViewModel.swift; sourceTree = "<group>"; };
 		EA4454A12EE49F7900AB485C /* CartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CartView.swift; sourceTree = "<group>"; };
 		EA4454A32EE49F7900AB485C /* ProductListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductListView.swift; sourceTree = "<group>"; };
-		EA5023252F391EFA00B64D18 /* WebRTCService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebRTCService.swift; sourceTree = "<group>"; };
-		EA5023272F391F0A00B64D18 /* SocketService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocketService.swift; sourceTree = "<group>"; };
-		EA5023292F391F1E00B64D18 /* WebRTCLiveStreamView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebRTCLiveStreamView.swift; sourceTree = "<group>"; };
-		EA50232A2F391F1E00B64D18 /* WebRTCVideoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebRTCVideoView.swift; sourceTree = "<group>"; };
+		EA5F7EE32F62E81B000F6540 /* SocketService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocketService.swift; sourceTree = "<group>"; };
+		EA5F7EE52F62EB8D000F6540 /* WebRTCService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebRTCService.swift; sourceTree = "<group>"; };
 		EABDBCC72EF1F3FC00D9D66B /* ProductDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductDetailViewModel.swift; sourceTree = "<group>"; };
 		EABDBCC92EF1F42800D9D66B /* CartProductModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CartProductModels.swift; sourceTree = "<group>"; };
 		EABDBCCB2EF1F44700D9D66B /* ProductDetailComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductDetailComponents.swift; sourceTree = "<group>"; };
@@ -79,6 +75,7 @@
 		EABDBCD32EF1FE2900D9D66B /* CheckoutComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckoutComponents.swift; sourceTree = "<group>"; };
 		EAF247322EFC0C390027BB44 /* OrdersViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrdersViewModel.swift; sourceTree = "<group>"; };
 		EAF247342EFC0C700027BB44 /* OrdersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrdersView.swift; sourceTree = "<group>"; };
+		EAFC9B832F5199690007030B /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -86,7 +83,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				EA8843A12F392F3F0059D5BB /* WebRTC in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +108,7 @@
 		EA4454862EE49F1100AB485C /* MallOfLebanon-iOS */ = {
 			isa = PBXGroup;
 			children = (
+				EAFC9B832F5199690007030B /* SearchView.swift */,
 				EA4454872EE49F7900AB485C /* Account */,
 				EA4454882EE49F7900AB485C /* APIModels.swift */,
 				EA4454892EE49F7900AB485C /* APIService.swift */,
@@ -182,8 +179,8 @@
 		EA44549A2EE49F7900AB485C /* Services */ = {
 			isa = PBXGroup;
 			children = (
-				EA5023272F391F0A00B64D18 /* SocketService.swift */,
-				EA5023252F391EFA00B64D18 /* WebRTCService.swift */,
+				EA5F7EE52F62EB8D000F6540 /* WebRTCService.swift */,
+				EA5F7EE32F62E81B000F6540 /* SocketService.swift */,
 				404E35B6FDB04B9B85767752 /* AuctionService.swift */,
 			);
 			path = Services;
@@ -243,8 +240,6 @@
 		EA4454A52EE49F7900AB485C /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				EA5023292F391F1E00B64D18 /* WebRTCLiveStreamView.swift */,
-				EA50232A2F391F1E00B64D18 /* WebRTCVideoView.swift */,
 				189BFEA3DBE849D58929AF99 /* AuctionViews.swift */,
 				EAF247352EFC0C700027BB44 /* Orders */,
 				EABDBCD42EF1FE2900D9D66B /* Checkout */,
@@ -314,9 +309,6 @@
 				Base,
 			);
 			mainGroup = E19999980000000000000000;
-			packageReferences = (
-				EA88439F2F392F3F0059D5BB /* XCRemoteSwiftPackageReference "WebRTC" */,
-			);
 			productRefGroup = E20001010000000000000000 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -345,10 +337,9 @@
 			files = (
 				EABDBCD22EF1FE0C00D9D66B /* CheckoutViewModel.swift in Sources */,
 				EA4454A62EE49F7900AB485C /* User.swift in Sources */,
-				EA5023262F391EFA00B64D18 /* WebRTCService.swift in Sources */,
 				EA4454A72EE49F7900AB485C /* APIModels.swift in Sources */,
-				EA5023282F391F0A00B64D18 /* SocketService.swift in Sources */,
 				EAF247332EFC0C390027BB44 /* OrdersViewModel.swift in Sources */,
+				EA5F7EE42F62E81B000F6540 /* SocketService.swift in Sources */,
 				EABDBCCE2EF1F44700D9D66B /* ProductDetailComponents.swift in Sources */,
 				EAF247362EFC0C700027BB44 /* OrdersView.swift in Sources */,
 				EABDBCCF2EF1F44700D9D66B /* ProductImageViewer.swift in Sources */,
@@ -358,6 +349,7 @@
 				EA4454AA2EE49F7900AB485C /* ContentView.swift in Sources */,
 				EA4454AB2EE49F7900AB485C /* CartManager.swift in Sources */,
 				EA4454AC2EE49F7900AB485C /* ProductModels.swift in Sources */,
+				EA5F7EE62F62EB8D000F6540 /* WebRTCService.swift in Sources */,
 				EABDBCC82EF1F3FC00D9D66B /* ProductDetailViewModel.swift in Sources */,
 				EA4454AD2EE49F7900AB485C /* ProductListViewModel.swift in Sources */,
 				EA4454AE2EE49F7900AB485C /* CartModels.swift in Sources */,
@@ -369,8 +361,7 @@
 				EA4454B22EE49F7900AB485C /* CartView.swift in Sources */,
 				EA4454B32EE49F7900AB485C /* ProductListView.swift in Sources */,
 				EA4454B42EE49F7900AB485C /* KeychainManager.swift in Sources */,
-				EA50232B2F391F1E00B64D18 /* WebRTCVideoView.swift in Sources */,
-				EA50232C2F391F1E00B64D18 /* WebRTCLiveStreamView.swift in Sources */,
+				EAFC9B842F5199690007030B /* SearchView.swift in Sources */,
 				A3DE27F3F69940598CA53BF7 /* AuctionModels.swift in Sources */,
 				B9BECCD1E97D4BFB8E44A81A /* AuctionService.swift in Sources */,
 				531F142895754358B10115C2 /* AuctionViews.swift in Sources */,
@@ -587,25 +578,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
-/* Begin XCRemoteSwiftPackageReference section */
-		EA88439F2F392F3F0059D5BB /* XCRemoteSwiftPackageReference "WebRTC" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/alexpiezo/WebRTC";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 95.4638.0;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		EA8843A02F392F3F0059D5BB /* WebRTC */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = EA88439F2F392F3F0059D5BB /* XCRemoteSwiftPackageReference "WebRTC" */;
-			productName = WebRTC;
-		};
-/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = E19999930000000000000000 /* Project object */;
 }

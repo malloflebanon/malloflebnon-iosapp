@@ -27,19 +27,20 @@ struct LiveStreamView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Stream Display Area
+            // Stream Display Area - Full Screen
             ZStack {
                 // Background
                 Rectangle()
                     .fill(Color.black)
-                    .aspectRatio(16/9, contentMode: .fit)
+                    .ignoresSafeArea() // Fill entire screen including safe areas
 
                 // Stream Content
                 if let frame = currentFrame {
                     Image(uiImage: frame)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .clipped()
+                        .scaleEffect(0.5) // Zoom out much more to show more content
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .transition(.opacity.animation(.easeInOut(duration: 0.1)))
                 } else {
                     // Placeholder/Loading State
@@ -197,7 +198,7 @@ struct LiveStreamView: View {
         socketService.connectToAuction(auctionId)
 
         // Handle stream frames
-        socketService.onStreamFrame { frame in
+        socketService.onLiveFrame { frame in
             DispatchQueue.main.async {
                 self.handleStreamFrame(frame)
             }
@@ -221,7 +222,7 @@ struct LiveStreamView: View {
             .store(in: &cancellables)
     }
 
-    private func handleStreamFrame(_ frame: StreamFrame) {
+    private func handleStreamFrame(_ frame: LiveFrameData) {
         // Only process frames for our auction
         guard frame.auctionId == auctionId else { return }
 
@@ -234,7 +235,7 @@ struct LiveStreamView: View {
 
             // Update statistics
             self.frameCount += 1
-            self.resolution = frame.resolution
+            self.resolution = frame.resolution ?? "Unknown"
 
             // Calculate FPS
             let now = Date()
@@ -244,7 +245,7 @@ struct LiveStreamView: View {
             }
             self.lastFrameTime = now
 
-            print("🎥 [LiveStreamView] Frame received: \(frame.quality) @ \(frame.resolution)")
+            print("🎥 [LiveStreamView] Frame received: \(frame.quality ?? "unknown") @ \(frame.resolution ?? "unknown")")
         } else {
             print("❌ [LiveStreamView] Failed to decode frame data")
         }

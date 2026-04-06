@@ -55,6 +55,14 @@ struct WebRTCLiveStreamView: View {
             }
 
             setupConnections()
+
+            // Auto-join the auction stream immediately to skip intermediate screen
+            print("🎯 [WebRTCLiveStreamView] ========== AUTO-JOIN SCHEDULED ==========")
+            print("🎯 [WebRTCLiveStreamView] Auto-joining auction stream...")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                print("🎯 [WebRTCLiveStreamView] ========== AUTO-JOIN TIMER FIRED ==========")
+                self.joinAuction()
+            }
         }
         .onDisappear {
             cleanup()
@@ -118,7 +126,9 @@ struct WebRTCLiveStreamView: View {
             .padding()
         }
         .onTapGesture {
+            print("🖱️ [WebRTCLiveStreamView] ========== TAP GESTURE TRIGGERED ==========")
             withAnimation(.easeInOut(duration: 0.3)) {
+                print("🖱️ [WebRTCLiveStreamView] About to call joinAuction() from tap gesture")
                 joinAuction()
             }
         }
@@ -353,36 +363,83 @@ struct WebRTCLiveStreamView: View {
     }
 
     private func fetchAndConnectToLiveAuction() {
+        print("📡 [WebRTCLiveStreamView] ========== FETCH AND CONNECT TO LIVE AUCTION ==========")
+        print("📡 [WebRTCLiveStreamView] Current auction ID: '\(auctionId)'")
         print("📡 [WebRTCLiveStreamView] Fetching live auctions dynamically...")
 
-        // Check for live auctions on localhost:3005
-        guard let url = URL(string: "http://localhost:3005/api/auctions") else {
-            print("❌ [WebRTCLiveStreamView] Invalid auction API URL")
+        // Check for live auctions on current IP:3007 (backend API)
+        let urlString = "http://localhost:3007/api/auction/live"
+        print("📡 [WebRTCLiveStreamView] API URL: \(urlString)")
+
+        guard let url = URL(string: urlString) else {
+            print("❌ [WebRTCLiveStreamView] Invalid auction API URL: \(urlString)")
             // Fallback to test auction
             connectToFallbackAuction()
             return
         }
 
+        print("📡 [WebRTCLiveStreamView] Starting HTTP request to fetch live auctions...")
+
         URLSession.shared.dataTask(with: url) { data, response, error in
+            print("📡 [WebRTCLiveStreamView] HTTP Response received!")
+
+            if let httpResponse = response as? HTTPURLResponse {
+                print("📡 [WebRTCLiveStreamView] HTTP Status Code: \(httpResponse.statusCode)")
+            }
+
+            if let error = error {
+                print("❌ [WebRTCLiveStreamView] HTTP Error: \(error)")
+                print("❌ [WebRTCLiveStreamView] Error description: \(error.localizedDescription)")
+            }
+
+            if let data = data {
+                print("📡 [WebRTCLiveStreamView] Data received: \(data.count) bytes")
+            } else {
+                print("❌ [WebRTCLiveStreamView] No data received")
+            }
 
             DispatchQueue.main.async {
                 if let error = error {
                     print("❌ [WebRTCLiveStreamView] Error fetching auctions: \(error.localizedDescription)")
-                    connectToFallbackAuction()
+                    self.connectToFallbackAuction()
                     return
                 }
 
                 guard let data = data else {
                     print("❌ [WebRTCLiveStreamView] No data received from auction API")
-                    connectToFallbackAuction()
+                    self.connectToFallbackAuction()
                     return
                 }
 
                 do {
+                    print("📡 [WebRTCLiveStreamView] Attempting to parse JSON response...")
+
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        print("📡 [WebRTCLiveStreamView] JSON parsed successfully!")
+                        print("📡 [WebRTCLiveStreamView] JSON keys: \(Array(json.keys))")
+
+                        if let auctions = json["auctions"] as? [[String: Any]] {
+                            print("🎯 [WebRTCLiveStreamView] Found \(auctions.count) auctions from API")
+
+                            // Log each auction for debugging
+                            for (index, auction) in auctions.enumerated() {
+                                let auctionId = auction["_id"] as? String ?? "unknown"
+                                let title = auction["title"] as? String ?? "unknown"
+                                let status = auction["status"] as? String ?? "unknown"
+                                print("🎯 [WebRTCLiveStreamView] Auction \(index): \(auctionId) - '\(title)' - status: \(status)")
+                            }
+                        } else {
+                            print("❌ [WebRTCLiveStreamView] Failed to parse 'auctions' array from JSON")
+                            print("📡 [WebRTCLiveStreamView] Available keys: \(Array(json.keys))")
+                        }
+                    } else {
+                        print("❌ [WebRTCLiveStreamView] Failed to parse JSON response")
+                    }
+
                     if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                        let auctions = json["auctions"] as? [[String: Any]] {
 
-                        print("🎯 [WebRTCLiveStreamView] Found \(auctions.count) auctions from API")
+                        print("🎯 [WebRTCLiveStreamView] Processing \(auctions.count) auctions...")
 
                         // Sort auctions to prioritize those most likely to have active streams
                         let sortedAuctions = auctions.sorted { auction1, auction2 in
